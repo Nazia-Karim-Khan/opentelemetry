@@ -1,0 +1,58 @@
+apiVersion: k0sctl.k0sproject.io/v1beta1
+kind: Cluster
+metadata:
+  name: k0s-cluster
+spec:
+  k0s:
+    config:
+      apiVersion: k0s.k0sproject.io/v1beta1
+      kind: ClusterConfig
+      spec:
+        api:
+            address: 10.10.3.2
+            externalAddress: 10.10.3.2
+            k0sApiPort: 9443
+            port: 6443
+            sans:
+              - 10.10.3.2
+              - 100.103.73.112 
+              - 100.115.125.107
+              - 172.16.106.4
+        network:
+          provider: custom
+          clusterDomain: cluster.local
+          dualStack: {}
+          kubeProxy:
+            metricsBindAddress: 0.0.0.0:10249
+            mode: iptables
+          podCIDR: 10.244.0.0/16
+          serviceCIDR: 10.245.0.0/16
+          calico: null
+          kuberouter: null   
+  hosts:
+    - ssh:
+        address: 10.10.3.2
+        user: bsfintech
+        port: 22
+        keyPath: ~/bsfintechtest
+      role: controller
+      installFlags:
+        - --disable-components=metrics-server,kube-proxy
+    - ssh:
+        address: 10.10.3.3
+        user: bsfintech
+        port: 22
+        keyPath: ~/bsfintechtest
+      role: worker
+    - ssh:
+        address: 10.10.3.4
+        user: bsfintech
+        port: 22
+        keyPath: ~/bsfintechtest
+      role: worker
+    - ssh:
+        address: 10.10.3.5
+        user: bsfintech
+        port: 22
+        keyPath: ~/bsfintechtest
+      role: worker
