@@ -1,0 +1,18 @@
+NAME: mimir
+LAST DEPLOYED: Thu Jan  2 17:03:24 2025
+NAMESPACE: mimir-test
+STATUS: deployed
+REVISION: 1
+NOTES:
+Welcome to Grafana Mimir!
+Remote write endpoints for Prometheus or Grafana Agent:
+Ingress is not enabled, see the nginx.ingress values.
+From inside the cluster:
+  http://mimir-nginx.mimir-test.svc:80/api/v1/push
+
+Read address, Grafana data source (Prometheus) URL:
+Ingress is not enabled, see the nginx.ingress values.
+From inside the cluster:
+  http://mimir-nginx.mimir-test.svc:80/prometheus
+
+**IMPORTANT**: Always consult CHANGELOG.md file at https://github.com/grafana/mimir/blob/main/operations/helm/charts/mimir-distributed/CHANGELOG.md and the deprecation list there to learn about breaking changes that require action during upgrade.

@@ -25,4 +25,9 @@ Install tempo:
 kubectl create namespace tempo
 helm install tempo grafana/tempo -f tempo/values.yaml --namespace tempo
 
-Ref: https://github.com/grafana/helm-charts/tree/main/charts
+Install mimir:
+kubectl create namespace mimir-test
+helm show values grafana/mimir-distributed > mimir/values.yaml
+helm install mimir grafana/mimir-distributed -f mimir/values.yaml --namespace mimir-test
+
+Ref: https://github.com/grafana/helm-charts/tree/main/charts, https://grafana.com/docs/helm-charts/mimir-distributed/latest/get-started-helm-charts/ [for mimir]
