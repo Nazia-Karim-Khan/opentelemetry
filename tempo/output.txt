@@ -1,0 +1,20 @@
+NAME: tempo
+LAST DEPLOYED: Sun Jan  5 08:09:47 2025
+NAMESPACE: tempo
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+***********************************************************************
+ Welcome to Grafana Tempo
+ Chart version: 1.28.0
+ Tempo version: 2.6.0
+***********************************************************************
+
+Installed components:
+* ingester
+* distributor
+* querier
+* query-frontend
+* compactor
+* memcached
