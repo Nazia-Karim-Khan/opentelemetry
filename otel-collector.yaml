@@ -1,33 +1,72 @@
-receivers:
-  otlp:
-    protocols:
-      grpc:
-        endpoint: 0.0.0.0:4317
+# apiVersion: opentelemetry.io/v1beta1
+# kind: OpenTelemetryCollector
+# metadata:
+#   name: otel-collector
+#   namespace: opentelemetry
+# config:
+#     receivers:
+#       otlp:
+#         protocols:
+#           grpc:
+#             endpoint: 0.0.0.0:4317
 
-exporters:
-  otlp:
-    endpoint: http://localhost:4318
-    tls:
-      insecure: true
-  prometheusremotewrite:
-    endpoint: http://localhost:9090/api/v1/write
-    tls:
-      insecure: true
-  otlphttp/logs:
-    endpoint: http://localhost:3100/otlp
-    tls:
-      insecure: true
+#     exporters:
+#       otlp:
+#         endpoint: http://localhost:4318
+#         tls:
+#           insecure: true
+#       prometheusremotewrite:
+#         endpoint: http://prometheus-server.prometheus.svc.cluster.local:80/api/v1/write
+#         tls:
+#           insecure: true
+#       otlphttp/logs:
+#         endpoint: http://localhost:3100/otlp
+#         tls:
+#           insecure: true
 
-service:
-  pipelines:
-    traces:
-      receivers: [ otlp ]
-      exporters: [ otlp ]
+#     service:
+#       pipelines:
+#         traces:
+#           receivers: [ otlp ]
+#           exporters: [ otlp ]
+#         metrics:
+#           receivers: [ otlp ]
+#           exporters: [ prometheusremotewrite ]
+#         logs:
+#           receivers: [ otlp ]
+#           exporters: [ otlphttp/logs ]
 
-    metrics:
-      receivers: [ otlp ]
-      exporters: [ prometheusremotewrite ]
+mode: deployment
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
 
-    logs:
-      receivers: [ otlp ]
-      exporters: [ otlphttp/logs ]
+  exporters:
+    otlp:
+      endpoint: http://localhost:4318
+      tls:
+        insecure: true
+    prometheusremotewrite:
+      endpoint: http://prometheus-server.prometheus.svc.cluster.local:80/api/v1/write
+      tls:
+        insecure: true
+    otlphttp/logs:
+      endpoint: http://localhost:3100/otlp
+      tls:
+        insecure: true
+
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        exporters: [otlp]
+      metrics:
+        receivers: [otlp]
+        exporters: [prometheusremotewrite]
+      logs:
+        receivers: [otlp]
+        exporters: [otlphttp/logs]
+

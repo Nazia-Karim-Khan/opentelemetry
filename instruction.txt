@@ -32,3 +32,35 @@ helm show values grafana/mimir-distributed > mimir/values.yaml
 helm install mimir grafana/mimir-distributed -f mimir/values.yaml --namespace mimir-test
 
 Ref: https://github.com/grafana/helm-charts/tree/main/charts, https://grafana.com/docs/helm-charts/mimir-distributed/latest/get-started-helm-charts/ [for mimir]
+
+
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+
+
+helm repo add jetstack https://charts.jetstack.io --force-update
+helm install \
+  cert-manager jetstack/cert-manager \
+  --namespace opentelemetry \
+  --create-namespace \
+  --version v1.16.2 \
+  --set crds.enabled=true
+  --set admissionWebhooks.certManager.enabled=true
+
+
+
+
+helm install opentelemetry-operator open-telemetry/opentelemetry-operator \
+--set "manager.collectorImage.repository=otel/opentelemetry-collector-k8s" \
+--set admissionWebhooks.certManager.enabled=false \
+--set admissionWebhooks.autoGenerateCert.enabled=true \
+-n opentelemetry \
+--create-namespace
+
+
+kubectl expose svc otel-collector --type=NodePort --name=otel-collector-nodeport -n opentelemetry
+
+
+helm install otel-collector open-telemetry/opentelemetry-collector \
+  --namespace opentelemetry \
+  --set image.repository="otel/opentelemetry-collector-k8s" \
+  --values otel-collector.yaml
