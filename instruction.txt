@@ -34,21 +34,8 @@ helm install mimir grafana/mimir-distributed -f mimir/values.yaml --namespace mi
 Ref: https://github.com/grafana/helm-charts/tree/main/charts, https://grafana.com/docs/helm-charts/mimir-distributed/latest/get-started-helm-charts/ [for mimir]
 
 
+Install open-telemetry operator:
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
-
-
-helm repo add jetstack https://charts.jetstack.io --force-update
-helm install \
-  cert-manager jetstack/cert-manager \
-  --namespace opentelemetry \
-  --create-namespace \
-  --version v1.16.2 \
-  --set crds.enabled=true
-  --set admissionWebhooks.certManager.enabled=true
-
-
-
-
 helm install opentelemetry-operator open-telemetry/opentelemetry-operator \
 --set "manager.collectorImage.repository=otel/opentelemetry-collector-k8s" \
 --set admissionWebhooks.certManager.enabled=false \
@@ -56,11 +43,20 @@ helm install opentelemetry-operator open-telemetry/opentelemetry-operator \
 -n opentelemetry \
 --create-namespace
 
+## Later changed the repository
 
-kubectl expose svc otel-collector --type=NodePort --name=otel-collector-nodeport -n opentelemetry
+helm upgrade opentelemetry-operator open-telemetry/opentelemetry-operator \
+--set "manager.collectorImage.repository=otel/opentelemetry-collector-contrib" \
+--set admissionWebhooks.certManager.enabled=false \
+--set admissionWebhooks.autoGenerateCert.enabled=true \
+-n opentelemetry 
 
-
+Install open-telemetry collector:
+##Wrong
 helm install otel-collector open-telemetry/opentelemetry-collector \
   --namespace opentelemetry \
   --set image.repository="otel/opentelemetry-collector-k8s" \
   --values otel-collector.yaml
+
+##Current
+kubectl apply -f otel-collector.yaml -n opentelemetry
