@@ -10,18 +10,28 @@ spec:
         protocols:
           grpc:
             endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
 
     exporters:
       otlp:
-        endpoint: http://localhost:4318
+        endpoint: "http://opentelemetry-collector-collector.opentelemetry.svc.cluster.local:4317"
         tls:
           insecure: true
       prometheusremotewrite:
         endpoint: http://prometheus-server.prometheus.svc.cluster.local:80/api/v1/write
         tls:
           insecure: true
+      loki:
+        endpoint: http://loki-loki-distributed-query-frontend.loki.svc.cluster.local:3100
+        tls:
+          insecure: true
+      otlp/tempo:
+        endpoint: "http://tempo-distributor.tempo.svc.cluster.local:3100"  
+        tls:
+          insecure: true
       otlphttp/logs:
-        endpoint: http://localhost:3100/otlp
+        endpoint: "http://opentelemetry-collector-collector.opentelemetry.svc.cluster.local:4318/otlp"
         tls:
           insecure: true
 
