@@ -94,15 +94,6 @@ helm upgrade opentelemetry-operator open-telemetry/opentelemetry-operator \
 
 ### Step 10: Install OpenTelemetry Collector
 
-Incorrect Installation:
-```bash
-helm install otel-collector open-telemetry/opentelemetry-collector \
-  --namespace opentelemetry \
-  --set image.repository="otel/opentelemetry-collector-k8s" \
-  --values otel-collector.yaml
-```
-
-Correct Installation:
 ```bash
 kubectl apply -f otel-collector.yaml -n opentelemetry
 ```
