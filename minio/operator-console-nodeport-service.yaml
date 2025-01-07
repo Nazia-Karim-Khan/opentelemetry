@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    meta.helm.sh/release-name: operator
+    meta.helm.sh/release-namespace: minio-operator
+  labels:
+    app.kubernetes.io/instance: operator
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/version: v5.0.11
+    helm.sh/chart: operator-5.0.11
+  name: console-nodeport
+  namespace: minio-operator
+spec:
+  selector:
+    app.kubernetes.io/instance: operator-console
+    app.kubernetes.io/name: operator
+  type: NodePort
+  ports:
+  - name: http
+    port: 9090
+    protocol: TCP
+    targetPort: 9090
+    nodePort: 30101

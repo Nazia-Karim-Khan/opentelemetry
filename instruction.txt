@@ -68,6 +68,15 @@ helm install otel-collector open-telemetry/opentelemetry-collector \
 kubectl apply -f otel-collector.yaml -n opentelemetry
 
 
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+helm install nginx-ingress ingress-nginx/ingress-nginx --namespace ingress-nginx --create-namespace
+
+
+helm install minio-operator minio-operator/operator --namespace minio-operator --create-namespace -f operator-values.yaml 
+
+
 Ref: https://github.com/grafana/helm-charts/tree/main/charts, https://grafana.com/docs/helm-charts/mimir-distributed/latest/get-started-helm-charts/ [for mimir]
      https://github.com/open-telemetry/opentelemetry-helm-charts?tab=readme-ov-file, https://grafana.com/docs/mimir/latest/configure/configure-otel-collector/, 
      https://www.reddit.com/r/OpenTelemetry/comments/1efmocv/cant_use_prometheusremotewrite_in_opentelemetry/?rdt=54991
