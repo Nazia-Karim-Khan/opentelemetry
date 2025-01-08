@@ -1,10 +1,15 @@
 Setup k0s cluster using:
 k0sctl apply --config k0s/k0sctl.yaml --no-wait
 k0sctl kubeconfig        
+if needed:
+cat /etc/resolv.conf
+nameserver 8.8.8.8
+nameserver 8.8.4.4
 
 Install cilium:
 chmod +x cilium/install.sh
 cilium install --version 1.16.1 --values cilium/cilium-values.yaml 
+cilium status --wait
 
 Install openebs:
 helm repo add openebs https://openebs.github.io/charts
@@ -20,7 +25,8 @@ If ClusterIP, kubectl port-forward svc/grafana -n grafana 5000:80
 
 Install distributed-loki:
 kubectl create namespace loki
-helm install loki grafana/loki-distributed -f loki/values.yaml --namespace loki
+helm pull grafana/loki-distributed --version 0.79.0
+helm install loki-distributed  loki/loki-distributed-0.79.0.tgz -n loki -f loki/values.yaml
 
 Install tempo:
 kubectl create namespace tempo
@@ -67,14 +73,18 @@ helm install otel-collector open-telemetry/opentelemetry-collector \
 ##Current
 kubectl apply -f otel-collector.yaml -n opentelemetry
 
-
+Install nginx:
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
-
 helm install nginx-ingress ingress-nginx/ingress-nginx --namespace ingress-nginx --create-namespace
 
+Install minio:
+helm repo add minio-operator https://operator.min.io/
+helm install minio-operator minio-operator/operator --namespace minio-operator --create-namespace -f minio/operator-values.yaml 
+kubectl apply -f minio/operator-console-nodeport-service.yaml
 
-helm install minio-operator minio-operator/operator --namespace minio-operator --create-namespace -f operator-values.yaml 
+helm install   --namespace minio-tenant   --create-namespace   tenant minio-operator/tenant -f minio/tenant-values.yaml
+
 
 
 Ref: https://github.com/grafana/helm-charts/tree/main/charts, https://grafana.com/docs/helm-charts/mimir-distributed/latest/get-started-helm-charts/ [for mimir]
