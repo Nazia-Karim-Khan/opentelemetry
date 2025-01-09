@@ -10,6 +10,7 @@ Install cilium:
 chmod +x cilium/install.sh
 cilium install --version 1.16.1 --values cilium/cilium-values.yaml 
 cilium status --wait
+helm uninstall cilium -n kube-system
 
 Install openebs:
 helm repo add openebs https://openebs.github.io/charts
@@ -57,11 +58,12 @@ helm install opentelemetry-operator open-telemetry/opentelemetry-operator \
 
 ## Later changed the repository
 
-helm upgrade opentelemetry-operator open-telemetry/opentelemetry-operator \
+helm install opentelemetry-operator open-telemetry/opentelemetry-operator \
 --set "manager.collectorImage.repository=otel/opentelemetry-collector-contrib" \
 --set admissionWebhooks.certManager.enabled=false \
 --set admissionWebhooks.autoGenerateCert.enabled=true \
 -n opentelemetry 
+--create-namespace
 
 Install open-telemetry collector:
 ##Wrong
@@ -83,7 +85,7 @@ helm repo add minio-operator https://operator.min.io/
 helm install minio-operator minio-operator/operator --namespace minio-operator --create-namespace -f minio/operator-values.yaml 
 kubectl apply -f minio/operator-console-nodeport-service.yaml
 
-helm install   --namespace minio-tenant   --create-namespace   tenant minio-operator/tenant -f minio/tenant-values.yaml
+helm install --namespace minio-tenant --create-namespace tenant minio-operator/tenant -f minio/tenant-values.yaml
 
 
 

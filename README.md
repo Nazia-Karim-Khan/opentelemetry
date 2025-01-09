@@ -42,6 +42,7 @@ kubectl port-forward svc/grafana -n grafana 5000:80
 
 ```bash
 kubectl create namespace loki
+helm show values grafana/loki-distributed > values.yaml
 helm install loki grafana/loki-distributed -f loki/values.yaml --namespace loki
 ```
 
