@@ -23,7 +23,7 @@ spec:
         tls:
           insecure: true
       otlp:
-        endpoint: "http://tempo-distributor.tempo.svc.cluster.local:3100"  
+        endpoint: http://tempo-distributor.tempo.svc.cluster.local:3100
         tls:
           insecure: true
 
