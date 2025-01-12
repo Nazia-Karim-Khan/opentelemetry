@@ -16,6 +16,7 @@ Install openebs:
 helm repo add openebs https://openebs.github.io/charts
 helm repo update
 helm install openebs openebs/openebs --namespace openebs --create-namespace
+kubectl patch storageclass openebs-hostpath -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "true"}}}'
 
 Install grafana:
 kubectl create namespace grafana

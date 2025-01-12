@@ -254,7 +254,7 @@ loki:
       cache_location: /loki/index_cache
       cache_ttl: 250h
     aws:
-      s3: http:///minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
+      s3: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
       bucketnames: loki
       region: us-east-1
       s3forcepathstyle: true
