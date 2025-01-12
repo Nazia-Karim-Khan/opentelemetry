@@ -1,2068 +1,1305 @@
-global:
-  image:
-    # -- Overrides the Docker registry globally for all images
-    registry: null
-  # -- Overrides the priorityClassName for all pods
-  priorityClassName: null
-  # -- configures cluster domain ("cluster.local" by default)
-  clusterDomain: "cluster.local"
-  # -- configures DNS service name
-  dnsService: "kube-dns"
-  # -- configures DNS service namespace
-  dnsNamespace: "kube-system"
+# yaml-language-server: $schema=values.schema.json
+# Default values for prometheus.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
 
-# -- Overrides the chart's name
-nameOverride: null
-
-# -- Overrides the chart's computed fullname
-fullnameOverride: null
-
-# -- Image pull secrets for Docker images
-imagePullSecrets: []
-
-# -- hostAliases to add
-hostAliases: []
-#  - ip: 1.2.3.4
-#    hostnames:
-#      - domain.tld
-
-loki:
-  # -- If set, these annotations are added to all of the Kubernetes controllers
-  # (Deployments, StatefulSets, etc) that this chart launches. Use this to
-  # implement something like the "Wave" controller or another controller that
-  # is monitoring top level deployment resources.
-  annotations: {}
-  # Configures the readiness probe for all of the Loki pods
-  readinessProbe:
-    httpGet:
-      path: /ready
-      port: http
-    initialDelaySeconds: 30
-    timeoutSeconds: 1
-  livenessProbe:
-    httpGet:
-      path: /ready
-      port: http
-    initialDelaySeconds: 300
-  image:
-    # -- The Docker registry
-    registry: docker.io
-    # -- Docker image repository
-    repository: grafana/loki
-    # -- Overrides the image tag whose default is the chart's appVersion
-    tag: null
-    # -- Docker image pull policy
-    pullPolicy: IfNotPresent
-  # -- Common labels for all pods
-  podLabels: {}
-  # -- Common annotations for all pods
-  podAnnotations: {}
-  # -- Common command override for all pods (except gateway)
-  command: null
-  # -- The number of old ReplicaSets to retain to allow rollback
-  revisionHistoryLimit: 10
-  # -- The SecurityContext for Loki pods
-  podSecurityContext:
-    fsGroup: 10001
-    runAsGroup: 10001
-    runAsNonRoot: true
-    runAsUser: 10001
-  # -- The SecurityContext for Loki containers
-  containerSecurityContext:
-    readOnlyRootFilesystem: true
-    capabilities:
-      drop:
-        - ALL
-    allowPrivilegeEscalation: false
-  # -- Specify an existing secret containing loki configuration. If non-empty, overrides `loki.config`
-  existingSecretForConfig: ""
-  # -- Store the loki configuration as a secret.
-  configAsSecret: false
-  # -- Annotations for the secret with loki configuration.
-  configSecretAnnotations: {}
-  # -- Additional labels for the secret with loki configuration.
-  configSecretLabels: {}
-  # -- Adds the appProtocol field to the memberlist service. This allows memberlist to work with istio protocol selection. Ex: "http" or "tcp"
-  appProtocol: ""
-  # -- Common annotations for all loki services
-  serviceAnnotations: {}
-  # Loki server configuration
-  # Refers to https://grafana.com/docs/loki/latest/configuration/#server
-  server:
-    # -- HTTP server listen port
-    http_listen_port: 3100
-  # -- Config file contents for Loki
-  # @default -- See values.yaml
-  config: |
-    auth_enabled: false
-
-    server:
-      {{- toYaml .Values.loki.server | nindent 6 }}
-
-    common:
-      compactor_address: http://{{ include "loki.compactorFullname" . }}:3100
-
-    distributor:
-      ring:
-        kvstore:
-          store: memberlist
-
-    memberlist:
-      cluster_label: "{{ .Release.Name }}.{{ .Release.Namespace }}"
-      join_members:
-        - {{ include "loki.fullname" . }}-memberlist
-
-    ingester_client:
-      grpc_client_config:
-        grpc_compression: gzip
-
-    ingester:
-      lifecycler:
-        ring:
-          kvstore:
-            store: memberlist
-          replication_factor: 1
-      chunk_idle_period: 30m
-      chunk_block_size: 262144
-      chunk_encoding: snappy
-      chunk_retain_period: 1m
-      max_transfer_retries: 0
-      wal:
-        dir: /var/loki/wal
-
-    limits_config:
-      enforce_metric_name: false
-      reject_old_samples: true
-      reject_old_samples_max_age: 168h
-      max_cache_freshness_per_query: 10m
-      split_queries_by_interval: 15m
-
-    {{- if .Values.loki.schemaConfig}}
-    schema_config:
-    {{- toYaml .Values.loki.schemaConfig | nindent 2}}
-    {{- end}}
-    {{- if .Values.loki.storageConfig}}
-    storage_config:
-    {{- if .Values.indexGateway.enabled}}
-    {{- $indexGatewayClient := dict "server_address" (printf "dns:///%s:9095" (include "loki.indexGatewayFullname" .)) }}
-    {{- $_ := set .Values.loki.storageConfig.boltdb_shipper "index_gateway_client" $indexGatewayClient }}
-    {{- end}}
-    {{- toYaml .Values.loki.storageConfig | nindent 2}}
-    {{- if .Values.memcachedIndexQueries.enabled }}
-      index_queries_cache_config:
-        memcached_client:
-          addresses: dnssrv+_memcached-client._tcp.{{ include "loki.memcachedIndexQueriesFullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}
-          consistent_hash: true
-    {{- end}}
-    {{- end}}
-
-    runtime_config:
-      file: /var/{{ include "loki.name" . }}-runtime/runtime.yaml
-
-    chunk_store_config:
-      max_look_back_period: 0s
-      {{- if .Values.memcachedChunks.enabled }}
-      chunk_cache_config:
-        embedded_cache:
-          enabled: false
-        memcached_client:
-          consistent_hash: true
-          addresses: dnssrv+_memcached-client._tcp.{{ include "loki.memcachedChunksFullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}
-      {{- end }}
-      {{- if .Values.memcachedIndexWrites.enabled }}
-      write_dedupe_cache_config:
-        memcached_client:
-          consistent_hash: true
-          addresses: dnssrv+_memcached-client._tcp.{{ include "loki.memcachedIndexWritesFullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}
-      {{- end }}
-
-    table_manager:
-      retention_deletes_enabled: false
-      retention_period: 0s
-
-    query_range:
-      align_queries_with_step: true
-      max_retries: 5
-      cache_results: true
-      results_cache:
-        cache:
-          {{- if .Values.memcachedFrontend.enabled }}
-          memcached_client:
-            addresses: dnssrv+_memcached-client._tcp.{{ include "loki.memcachedFrontendFullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}
-            consistent_hash: true
-          {{- else }}
-          embedded_cache:
-            enabled: true
-            ttl: 24h
-          {{- end }}
-
-    frontend_worker:
-      {{- if .Values.queryScheduler.enabled }}
-      scheduler_address: {{ include "loki.querySchedulerFullname" . }}:9095
-      {{- else }}
-      frontend_address: {{ include "loki.queryFrontendFullname" . }}-headless:9095
-      {{- end }}
-
-    frontend:
-      log_queries_longer_than: 5s
-      compress_responses: true
-      {{- if .Values.queryScheduler.enabled }}
-      scheduler_address: {{ include "loki.querySchedulerFullname" . }}:9095
-      {{- end }}
-      tail_proxy_url: http://{{ include "loki.querierFullname" . }}:3100
-
-    compactor:
-      shared_store: filesystem
-      working_directory: /var/loki/compactor
-
-    ruler:
-      storage:
-        type: local
-        local:
-          directory: /etc/loki/rules
-      ring:
-        kvstore:
-          store: memberlist
-      rule_path: /tmp/loki/scratch
-      alertmanager_url: https://alertmanager.xx
-      external_url: https://alertmanager.xx
-
-  # -- Check https://grafana.com/docs/loki/latest/configuration/#schema_config for more info on how to configure schemas
-  schemaConfig:
-    configs:
-    - from: "2020-09-07"
-      store: boltdb-shipper
-      object_store: filesystem
-      schema: v11
-      index:
-        prefix: loki_index_
-        period: 24h
-
-  # -- Check https://grafana.com/docs/loki/latest/configuration/#storage_config for more info on how to configure storages
-  storageConfig:
-    boltdb_shipper:
-      shared_store: filesystem
-      active_index_directory: /var/loki/index
-      cache_location: /var/loki/cache
-      cache_ttl: 168h
-    filesystem:
-      directory: /var/loki/chunks
-# -- Uncomment to configure each storage individually
-#   azure: {}
-#   gcs: {}
-#   s3: {}
-#   boltdb: {}
-
-  # -- Structured loki configuration, takes precedence over `loki.config`, `loki.schemaConfig`, `loki.storageConfig`
-  structuredConfig: {}
-
-# -- Provides a reloadable runtime configuration file for some specific configuration
-runtimeConfig: {}
-
-serviceAccount:
-  # -- Specifies whether a ServiceAccount should be created
-  create: true
-  # -- The name of the ServiceAccount to use.
-  # If not set and create is true, a name is generated using the fullname template
-  name: null
-  # -- Image pull secrets for the service account
-  imagePullSecrets: []
-  # -- Labels for the service account
-  labels: {}
-  # -- Annotations for the service account
-  annotations: {}
-  # -- Set this toggle to false to opt out of automounting API credentials for the service account
-  automountServiceAccountToken: true
-
-# RBAC configuration
 rbac:
-  # -- If pspEnabled true, a PodSecurityPolicy is created for K8s that use psp.
-  pspEnabled: false
-  # -- For OpenShift set pspEnabled to 'false' and sccEnabled to 'true' to use the SecurityContextConstraints.
-  sccEnabled: false
+  create: true
 
-# ServiceMonitor configuration
-serviceMonitor:
-  # -- If enabled, ServiceMonitor resources for Prometheus Operator are created
+podSecurityPolicy:
   enabled: false
-  # -- Alternative namespace for ServiceMonitor resources
-  namespace: null
-  # -- Namespace selector for ServiceMonitor resources
-  namespaceSelector: {}
-  # -- Optional expressions to match on
-  matchExpressions: []
-    # - key: prometheus.io/service-monitor
-    #   operator: NotIn
-    #   values:
-    #     - "false"
-  # -- ServiceMonitor annotations
-  annotations: {}
-  # -- Additional ServiceMonitor labels
-  labels: {}
-  # -- ServiceMonitor scrape interval
-  interval: null
-  # -- ServiceMonitor scrape timeout in Go duration format (e.g. 15s)
-  scrapeTimeout: null
-  # -- ServiceMonitor relabel configs to apply to samples before scraping
-  # https://github.com/prometheus-operator/prometheus-operator/blob/master/Documentation/api.md#relabelconfig
-  relabelings: []
-  # -- ServiceMonitor metric relabel configs to apply to samples before ingestion
-  # https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api.md#endpoint
-  metricRelabelings: []
-  # --ServiceMonitor will add labels from the service to the Prometheus metric
-  # https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api.md#servicemonitorspec
-  targetLabels: []
-  # -- ServiceMonitor will use http by default, but you can pick https as well
-  scheme: http
-  # -- ServiceMonitor will use these tlsConfig settings to make the health check requests
-  tlsConfig: null
 
-# Rules for the Prometheus Operator
-prometheusRule:
-  # -- If enabled, a PrometheusRule resource for Prometheus Operator is created
-  enabled: false
-  # -- Alternative namespace for the PrometheusRule resource
-  namespace: null
-  # -- PrometheusRule annotations
-  annotations: {}
-  # -- Additional PrometheusRule labels
-  labels: {}
-  # -- Contents of Prometheus rules file
-  groups: []
-  #  - name: loki_rules
-  #    rules:
-  #      - expr: histogram_quantile(0.99, sum(rate(loki_request_duration_seconds_bucket[1m]))
-  #          by (le, cluster, job))
-  #        record: cluster_job:loki_request_duration_seconds:99quantile
-  #      - expr: histogram_quantile(0.50, sum(rate(loki_request_duration_seconds_bucket[1m]))
-  #          by (le, cluster, job))
-  #        record: cluster_job:loki_request_duration_seconds:50quantile
-  #      - expr: sum(rate(loki_request_duration_seconds_sum[1m])) by (cluster, job) / sum(rate(loki_request_duration_seconds_count[1m]))
-  #          by (cluster, job)
-  #        record: cluster_job:loki_request_duration_seconds:avg
-  #      - expr: sum(rate(loki_request_duration_seconds_bucket[1m])) by (le, cluster, job)
-  #        record: cluster_job:loki_request_duration_seconds_bucket:sum_rate
-  #      - expr: sum(rate(loki_request_duration_seconds_sum[1m])) by (cluster, job)
-  #        record: cluster_job:loki_request_duration_seconds_sum:sum_rate
-  #      - expr: sum(rate(loki_request_duration_seconds_count[1m])) by (cluster, job)
-  #        record: cluster_job:loki_request_duration_seconds_count:sum_rate
-  #      - expr: histogram_quantile(0.99, sum(rate(loki_request_duration_seconds_bucket[1m]))
-  #          by (le, cluster, job, route))
-  #        record: cluster_job_route:loki_request_duration_seconds:99quantile
-  #      - expr: histogram_quantile(0.50, sum(rate(loki_request_duration_seconds_bucket[1m]))
-  #          by (le, cluster, job, route))
-  #        record: cluster_job_route:loki_request_duration_seconds:50quantile
-  #      - expr: sum(rate(loki_request_duration_seconds_sum[1m])) by (cluster, job, route)
-  #          / sum(rate(loki_request_duration_seconds_count[1m])) by (cluster, job, route)
-  #        record: cluster_job_route:loki_request_duration_seconds:avg
-  #      - expr: sum(rate(loki_request_duration_seconds_bucket[1m])) by (le, cluster, job,
-  #          route)
-  #        record: cluster_job_route:loki_request_duration_seconds_bucket:sum_rate
-  #      - expr: sum(rate(loki_request_duration_seconds_sum[1m])) by (cluster, job, route)
-  #        record: cluster_job_route:loki_request_duration_seconds_sum:sum_rate
-  #      - expr: sum(rate(loki_request_duration_seconds_count[1m])) by (cluster, job, route)
-  #        record: cluster_job_route:loki_request_duration_seconds_count:sum_rate
-  #      - expr: histogram_quantile(0.99, sum(rate(loki_request_duration_seconds_bucket[1m]))
-  #          by (le, cluster, namespace, job, route))
-  #        record: cluster_namespace_job_route:loki_request_duration_seconds:99quantile
-  #      - expr: histogram_quantile(0.50, sum(rate(loki_request_duration_seconds_bucket[1m]))
-  #          by (le, cluster, namespace, job, route))
-  #        record: cluster_namespace_job_route:loki_request_duration_seconds:50quantile
-  #      - expr: sum(rate(loki_request_duration_seconds_sum[1m])) by (cluster, namespace,
-  #          job, route) / sum(rate(loki_request_duration_seconds_count[1m])) by (cluster,
-  #          namespace, job, route)
-  #        record: cluster_namespace_job_route:loki_request_duration_seconds:avg
-  #      - expr: sum(rate(loki_request_duration_seconds_bucket[1m])) by (le, cluster, namespace,
-  #          job, route)
-  #        record: cluster_namespace_job_route:loki_request_duration_seconds_bucket:sum_rate
-  #      - expr: sum(rate(loki_request_duration_seconds_sum[1m])) by (cluster, namespace,
-  #          job, route)
-  #        record: cluster_namespace_job_route:loki_request_duration_seconds_sum:sum_rate
-  #      - expr: sum(rate(loki_request_duration_seconds_count[1m])) by (cluster, namespace,
-  #          job, route)
-  #        record: cluster_namespace_job_route:loki_request_duration_seconds_count:sum_rate
+imagePullSecrets: []
+# - name: "image-pull-secret"
 
-# Configuration for the ingester
-ingester:
-  # -- Kind of deployment [StatefulSet/Deployment]
-  kind: StatefulSet
-  # -- Number of replicas for the ingester
-  replicas: 1
-  # -- hostAliases to add
-  hostAliases: []
-  #  - ip: 1.2.3.4
-  #    hostnames:
-  #      - domain.tld
-  autoscaling:
-    # -- Enable autoscaling for the ingester
-    enabled: false
-    # -- Minimum autoscaling replicas for the ingester
-    minReplicas: 1
-    # -- Maximum autoscaling replicas for the ingester
-    maxReplicas: 3
-    # -- Target CPU utilisation percentage for the ingester
-    targetCPUUtilizationPercentage: 60
-    # -- Target memory utilisation percentage for the ingester
-    targetMemoryUtilizationPercentage: null
-    # -- Allows one to define custom metrics using the HPA/v2 schema (for example, Pods, Object or External metrics)
-    customMetrics: []
-    # - type: Pods
-    #   pods:
-    #     metric:
-    #       name: loki_lines_total
-    #     target:
-    #       type: AverageValue
-    #       averageValue: 10k
-    behavior:
-      # -- Enable autoscaling behaviours
-      enabled: false
-      # -- define scale down policies, must conform to HPAScalingRules
-      scaleDown: {}
-      # -- define scale up policies, must conform to HPAScalingRules
-      scaleUp: {}
-  image:
-    # -- The Docker registry for the ingester image. Overrides `loki.image.registry`
-    registry: null
-    # -- Docker image repository for the ingester image. Overrides `loki.image.repository`
-    repository: null
-    # -- Docker image tag for the ingester image. Overrides `loki.image.tag`
-    tag: null
-  # -- Command to execute instead of defined in Docker image
-  command: null
-  # -- The name of the PriorityClass for ingester pods
-  priorityClassName: null
-  # -- Labels for ingester pods
-  podLabels: {}
-  # -- Annotations for ingester pods
-  podAnnotations: {}
-  # -- Labels for ingester service
-  serviceLabels: {}
-  # -- Additional CLI args for the ingester
-  extraArgs: []
-  # -- Environment variables to add to the ingester pods
-  extraEnv: []
-  # -- Environment variables from secrets or configmaps to add to the ingester pods
-  extraEnvFrom: []
-  # -- Volume mounts to add to the ingester pods
-  extraVolumeMounts: []
-  # -- Volumes to add to the ingester pods
-  extraVolumes: []
-  # -- Resource requests and limits for the ingester
-  resources: {}
-  # -- Containers to add to the ingester pods
-  extraContainers: []
-  # -- Init containers to add to the ingester pods
-  initContainers: []
-  # -- Grace period to allow the ingester to shutdown before it is killed. Especially for the ingester,
-  # this must be increased. It must be long enough so ingesters can be gracefully shutdown flushing/transferring
-  # all data and to successfully leave the member ring on shutdown.
-  terminationGracePeriodSeconds: 300
-  # -- Lifecycle for the ingester container
-  lifecycle: {}
-  # -- topologySpread for ingester pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Defaults to allow skew no more then 1 node per AZ
-  topologySpreadConstraints: |
-    - maxSkew: 1
-      topologyKey: kubernetes.io/hostname
-      whenUnsatisfiable: ScheduleAnyway
-      labelSelector:
-        matchLabels:
-          {{- include "loki.ingesterSelectorLabels" . | nindent 6 }}
-  # -- Affinity for ingester pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Hard node and soft zone anti-affinity
-  affinity: |
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchLabels:
-              {{- include "loki.ingesterSelectorLabels" . | nindent 10 }}
-          topologyKey: kubernetes.io/hostname
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                {{- include "loki.ingesterSelectorLabels" . | nindent 12 }}
-            topologyKey: failure-domain.beta.kubernetes.io/zone
-  # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
-  # -- Max Surge for ingester pods
-  maxSurge: 0
-  # -- Node selector for ingester pods
-  nodeSelector: {}
-  # -- Tolerations for ingester pods
-  tolerations: []
-  # -- readiness probe settings for ingester pods. If empty, use `loki.readinessProbe`
-  readinessProbe: {}
-  # -- liveness probe settings for ingester pods. If empty use `loki.livenessProbe`
-  livenessProbe: {}
-  persistence:
-    # -- Enable creating PVCs which is required when using boltdb-shipper
-    enabled: false
-    # -- Use emptyDir with ramdisk for storage. **Please note that all data in ingester will be lost on pod restart**
-    inMemory: false
-    # -- List of the ingester PVCs
-    # @notationType -- list
-    claims:
-      - name: data
-        size: 10Gi
-        #   -- Storage class to be used.
-        #   If defined, storageClassName: <storageClass>.
-        #   If set to "-", storageClassName: "", which disables dynamic provisioning.
-        #   If empty or set to null, no storageClassName spec is
-        #   set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-        storageClass: null
-      # - name: wal
-      #   size: 150Gi
-    # -- Enable StatefulSetAutoDeletePVC feature
-    enableStatefulSetAutoDeletePVC: false
-    whenDeleted: Retain
-    whenScaled: Retain
-  # -- Adds the appProtocol field to the ingester service. This allows ingester to work with istio protocol selection.
-  appProtocol:
-    # -- Set the optional grpc service protocol. Ex: "grpc", "http2" or "https"
-    grpc: ""
-
-# Configuration for the distributor
-distributor:
-  # -- Number of replicas for the distributor
-  replicas: 1
-  # -- hostAliases to add
-  hostAliases: []
-  #  - ip: 1.2.3.4
-  #    hostnames:
-  #      - domain.tld
-  autoscaling:
-    # -- Enable autoscaling for the distributor
-    enabled: false
-    # -- Minimum autoscaling replicas for the distributor
-    minReplicas: 1
-    # -- Maximum autoscaling replicas for the distributor
-    maxReplicas: 3
-    # -- Target CPU utilisation percentage for the distributor
-    targetCPUUtilizationPercentage: 60
-    # -- Target memory utilisation percentage for the distributor
-    targetMemoryUtilizationPercentage: null
-    # -- Allows one to define custom metrics using the HPA/v2 schema (for example, Pods, Object or External metrics)
-    customMetrics: []
-    # - type: Pods
-    #   pods:
-    #     metric:
-    #       name: loki_lines_total
-    #     target:
-    #       type: AverageValue
-    #       averageValue: 10k
-    behavior:
-      # -- Enable autoscaling behaviours
-      enabled: false
-      # -- define scale down policies, must conform to HPAScalingRules
-      scaleDown: {}
-      # -- define scale up policies, must conform to HPAScalingRules
-      scaleUp: {}
-  image:
-    # -- The Docker registry for the distributor image. Overrides `loki.image.registry`
-    registry: null
-    # -- Docker image repository for the distributor image. Overrides `loki.image.repository`
-    repository: null
-    # -- Docker image tag for the distributor image. Overrides `loki.image.tag`
-    tag: null
-  # -- Command to execute instead of defined in Docker image
-  command: null
-  # -- The name of the PriorityClass for distributor pods
-  priorityClassName: null
-  # -- Labels for distributor pods
-  podLabels: {}
-  # -- Annotations for distributor pods
-  podAnnotations: {}
-  # -- Labels for distributor service
-  serviceLabels: {}
-  # -- Additional CLI args for the distributor
-  extraArgs: []
-  # -- Environment variables to add to the distributor pods
-  extraEnv: []
-  # -- Environment variables from secrets or configmaps to add to the distributor pods
-  extraEnvFrom: []
-  # -- Volume mounts to add to the distributor pods
-  extraVolumeMounts: []
-  # -- Volumes to add to the distributor pods
-  extraVolumes: []
-  # -- Resource requests and limits for the distributor
-  resources: {}
-  # -- Containers to add to the distributor pods
-  extraContainers: []
-  # -- Grace period to allow the distributor to shutdown before it is killed
-  terminationGracePeriodSeconds: 30
-  # -- Affinity for distributor pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Hard node and soft zone anti-affinity
-  affinity: |
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchLabels:
-              {{- include "loki.distributorSelectorLabels" . | nindent 10 }}
-          topologyKey: kubernetes.io/hostname
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                {{- include "loki.distributorSelectorLabels" . | nindent 12 }}
-            topologyKey: failure-domain.beta.kubernetes.io/zone
-  # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
-  # -- Max Surge for distributor pods
-  maxSurge: 0
-  # -- Node selector for distributor pods
-  nodeSelector: {}
-  # -- Tolerations for distributor pods
-  tolerations: []
-    # -- Adds the appProtocol field to the distributor service. This allows distributor to work with istio protocol selection.
-  appProtocol:
-    # -- Set the optional grpc service protocol. Ex: "grpc", "http2" or "https"
-    grpc: ""
-
-# Configuration for the querier
-querier:
-  # -- Number of replicas for the querier
-  replicas: 1
-  # -- hostAliases to add
-  hostAliases: []
-  #  - ip: 1.2.3.4
-  #    hostnames:
-  #      - domain.tld
-  autoscaling:
-    # -- Enable autoscaling for the querier, this is only used if `indexGateway.enabled: true`
-    enabled: false
-    # -- Minimum autoscaling replicas for the querier
-    minReplicas: 1
-    # -- Maximum autoscaling replicas for the querier
-    maxReplicas: 3
-    # -- Target CPU utilisation percentage for the querier
-    targetCPUUtilizationPercentage: 60
-    # -- Target memory utilisation percentage for the querier
-    targetMemoryUtilizationPercentage: null
-    # -- Allows one to define custom metrics using the HPA/v2 schema (for example, Pods, Object or External metrics)
-    customMetrics: []
-    # - type: External
-    #   external:
-    #     metric:
-    #       name: loki_inflight_queries
-    #     target:
-    #       type: AverageValue
-    #       averageValue: 12
-    behavior:
-      # -- Enable autoscaling behaviours
-      enabled: false
-      # -- define scale down policies, must conform to HPAScalingRules
-      scaleDown: {}
-      # -- define scale up policies, must conform to HPAScalingRules
-      scaleUp: {}
-  image:
-    # -- The Docker registry for the querier image. Overrides `loki.image.registry`
-    registry: null
-    # -- Docker image repository for the querier image. Overrides `loki.image.repository`
-    repository: null
-    # -- Docker image tag for the querier image. Overrides `loki.image.tag`
-    tag: null
-  # -- Command to execute instead of defined in Docker image
-  command: null
-  # -- The name of the PriorityClass for querier pods
-  priorityClassName: null
-  # -- Labels for querier pods
-  podLabels: {}
-  # -- Annotations for querier pods
-  podAnnotations: {}
-  # -- Labels for querier service
-  serviceLabels: {}
-  # -- Additional CLI args for the querier
-  extraArgs: []
-  # -- Environment variables to add to the querier pods
-  extraEnv: []
-  # -- Environment variables from secrets or configmaps to add to the querier pods
-  extraEnvFrom: []
-  # -- Volume mounts to add to the querier pods
-  extraVolumeMounts: []
-  # -- Volumes to add to the querier pods
-  extraVolumes: []
-  # -- Resource requests and limits for the querier
-  resources: {}
-  # -- Containers to add to the querier pods
-  extraContainers: []
-  # -- Init containers to add to the querier pods
-  initContainers: []
-  # -- Grace period to allow the querier to shutdown before it is killed
-  terminationGracePeriodSeconds: 30
-  # -- topologySpread for querier pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Defaults to allow skew no more then 1 node per AZ
-  topologySpreadConstraints: |
-    - maxSkew: 1
-      topologyKey: kubernetes.io/hostname
-      whenUnsatisfiable: ScheduleAnyway
-      labelSelector:
-        matchLabels:
-          {{- include "loki.querierSelectorLabels" . | nindent 6 }}
-  # -- Affinity for querier pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Hard node and soft zone anti-affinity
-  affinity: |
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchLabels:
-              {{- include "loki.querierSelectorLabels" . | nindent 10 }}
-          topologyKey: kubernetes.io/hostname
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                {{- include "loki.querierSelectorLabels" . | nindent 12 }}
-            topologyKey: failure-domain.beta.kubernetes.io/zone
-  # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
-  # -- Max Surge for querier pods
-  maxSurge: 0
-  # -- Node selector for querier pods
-  nodeSelector: {}
-  # -- Tolerations for querier pods
-  tolerations: []
-  # -- DNSConfig for querier pods
-  dnsConfig: {}
-  persistence:
-    # -- Enable creating PVCs for the querier cache
-    enabled: false
-    # -- Size of persistent disk
-    size: 10Gi
-    # -- Storage class to be used.
-    # If defined, storageClassName: <storageClass>.
-    # If set to "-", storageClassName: "", which disables dynamic provisioning.
-    # If empty or set to null, no storageClassName spec is
-    # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: null
-    # -- Annotations for querier PVCs
+## Define serviceAccount names for components. Defaults to component's fully qualified name.
+##
+serviceAccounts:
+  server:
+    create: true
+    name: ""
     annotations: {}
-  # -- Adds the appProtocol field to the querier service. This allows querier to work with istio protocol selection.
-  appProtocol:
-    # -- Set the optional grpc service protocol. Ex: "grpc", "http2" or "https"
-    grpc: ""
 
-# Configuration for the query-frontend
-queryFrontend:
-  # -- Number of replicas for the query-frontend
-  replicas: 1
-  # -- hostAliases to add
-  hostAliases: []
-  #  - ip: 1.2.3.4
-  #    hostnames:
-  #      - domain.tld
-  autoscaling:
-    # -- Enable autoscaling for the query-frontend
-    enabled: false
-    # -- Minimum autoscaling replicas for the query-frontend
-    minReplicas: 1
-    # -- Maximum autoscaling replicas for the query-frontend
-    maxReplicas: 3
-    # -- Target CPU utilisation percentage for the query-frontend
-    targetCPUUtilizationPercentage: 60
-    # -- Target memory utilisation percentage for the query-frontend
-    targetMemoryUtilizationPercentage: null
-    # -- Allows one to define custom metrics using the HPA/v2 schema (for example, Pods, Object or External metrics)
-    customMetrics: []
-    # - type: Pods
-    #   pods:
-    #     metric:
-    #       name: loki_query_rate
-    #     target:
-    #       type: AverageValue
-    #       averageValue: 100
-    behavior:
-      # -- Enable autoscaling behaviours
+    ## Opt out of automounting Kubernetes API credentials.
+    ## It will be overriden by server.automountServiceAccountToken value, if set.
+    # automountServiceAccountToken: false
+
+## Additional labels to attach to all resources
+commonMetaLabels: {}
+
+## Monitors ConfigMap changes and POSTs to a URL
+## Ref: https://github.com/prometheus-operator/prometheus-operator/tree/main/cmd/prometheus-config-reloader
+##
+configmapReload:
+  ## URL for configmap-reload to use for reloads
+  ##
+  reloadUrl: ""
+
+  ## env sets environment variables to pass to the container. Can be set as name/value pairs,
+  ## read from secrets or configmaps.
+  env: []
+    # - name: SOMEVAR
+    #   value: somevalue
+    # - name: PASSWORD
+    #   valueFrom:
+    #     secretKeyRef:
+    #       name: mysecret
+    #       key: password
+    #       optional: false
+
+  prometheus:
+    ## If false, the configmap-reload container will not be deployed
+    ##
+    enabled: true
+
+    ## configmap-reload container name
+    ##
+    name: configmap-reload
+
+    ## configmap-reload container image
+    ##
+    image:
+      repository: quay.io/prometheus-operator/prometheus-config-reloader
+      tag: v0.78.2
+      # When digest is set to a non-empty value, images will be pulled by digest (regardless of tag value).
+      digest: ""
+      pullPolicy: IfNotPresent
+
+    ## config-reloader's container port and port name for probes and metrics
+    containerPort: 8080
+    containerPortName: metrics
+
+    ## Additional configmap-reload container arguments
+    ## Set to null for argumentless flags
+    ##
+    extraArgs: {}
+
+    ## Additional configmap-reload volume directories
+    ##
+    extraVolumeDirs: []
+
+    ## Additional configmap-reload volume mounts
+    ##
+    extraVolumeMounts: []
+
+    ## Additional configmap-reload mounts
+    ##
+    extraConfigmapMounts: []
+      # - name: prometheus-alerts
+      #   mountPath: /etc/alerts.d
+      #   subPath: ""
+      #   configMap: prometheus-alerts
+      #   readOnly: true
+
+    ## Security context to be added to configmap-reload container
+    containerSecurityContext: {}
+
+    ## Settings for Prometheus reloader's readiness, liveness and startup probes
+    ## Ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+    ##
+
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: metrics
+        scheme: HTTP
+      periodSeconds: 10
+      initialDelaySeconds: 2
+
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: metrics
+        scheme: HTTP
+      periodSeconds: 10
+
+    startupProbe:
       enabled: false
-      # -- define scale down policies, must conform to HPAScalingRules
-      scaleDown: {}
-      # -- define scale up policies, must conform to HPAScalingRules
-      scaleUp: {}
-  image:
-    # -- The Docker registry for the query-frontend image. Overrides `loki.image.registry`
-    registry: null
-    # -- Docker image repository for the query-frontend image. Overrides `loki.image.repository`
-    repository: null
-    # -- Docker image tag for the query-frontend image. Overrides `loki.image.tag`
-    tag: null
-  # -- Command to execute instead of defined in Docker image
-  command: null
-  # -- The name of the PriorityClass for query-frontend pods
-  priorityClassName: null
-  # -- Labels for query-frontend pods
-  podLabels: {}
-  # -- Annotations for query-frontend pods
-  podAnnotations: {}
-  # -- Labels for query-frontend service
-  serviceLabels: {}
-  # -- Additional CLI args for the query-frontend
-  extraArgs: []
-  # -- Environment variables to add to the query-frontend pods
-  extraEnv: []
-  # -- Environment variables from secrets or configmaps to add to the query-frontend pods
-  extraEnvFrom: []
-  # -- Volume mounts to add to the query-frontend pods
-  extraVolumeMounts: []
-  # -- Volumes to add to the query-frontend pods
-  extraVolumes: []
-  # -- Resource requests and limits for the query-frontend
-  resources: {}
-  # -- Containers to add to the query-frontend pods
-  extraContainers: []
-  # -- Grace period to allow the query-frontend to shutdown before it is killed
-  terminationGracePeriodSeconds: 30
-  # -- Affinity for query-frontend pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Hard node and soft zone anti-affinity
-  affinity: |
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchLabels:
-              {{- include "loki.queryFrontendSelectorLabels" . | nindent 10 }}
-          topologyKey: kubernetes.io/hostname
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                {{- include "loki.queryFrontendSelectorLabels" . | nindent 12 }}
-            topologyKey: failure-domain.beta.kubernetes.io/zone
-  # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
-  # -- Node selector for query-frontend pods
-  nodeSelector: {}
-  # -- Tolerations for query-frontend pods
-  tolerations: []
-  # -- Adds the appProtocol field to the queryFrontend service. This allows queryFrontend to work with istio protocol selection.
-  appProtocol:
-    # -- Set the optional grpc service protocol. Ex: "grpc", "http2" or "https"
-    grpc: ""
+      httpGet:
+        path: /healthz
+        port: metrics
+        scheme: HTTP
+      periodSeconds: 10
 
-# Configuration for the query-scheduler
-queryScheduler:
-  # -- Specifies whether the query-scheduler should be decoupled from the query-frontend
-  enabled: false
-  # -- Number of replicas for the query-scheduler.
-  # It should be lower than `-querier.max-concurrent` to avoid generating back-pressure in queriers;
-  # it's also recommended that this value evenly divides the latter
-  replicas: 2
-  # -- hostAliases to add
-  hostAliases: []
-  #  - ip: 1.2.3.4
-  #    hostnames:
-  #      - domain.tld
-  image:
-    # -- The Docker registry for the query-scheduler image. Overrides `loki.image.registry`
-    registry: null
-    # -- Docker image repository for the query-scheduler image. Overrides `loki.image.repository`
-    repository: null
-    # -- Docker image tag for the query-scheduler image. Overrides `loki.image.tag`
-    tag: null
-  # -- The name of the PriorityClass for query-scheduler pods
-  priorityClassName: null
-  # -- Labels for query-scheduler pods
-  podLabels: {}
-  # -- Annotations for query-scheduler pods
-  podAnnotations: {}
-  # -- Labels for query-scheduler service
-  serviceLabels: {}
-  # -- Additional CLI args for the query-scheduler
-  extraArgs: []
-  # -- Environment variables to add to the query-scheduler pods
-  extraEnv: []
-  # -- Environment variables from secrets or configmaps to add to the query-scheduler pods
-  extraEnvFrom: []
-  # -- Volume mounts to add to the query-scheduler pods
-  extraVolumeMounts: []
-  # -- Volumes to add to the query-scheduler pods
-  extraVolumes: []
-  # -- Resource requests and limits for the query-scheduler
-  resources: {}
-  # -- Containers to add to the query-scheduler pods
-  extraContainers: []
-  # -- Grace period to allow the query-scheduler to shutdown before it is killed
-  terminationGracePeriodSeconds: 30
-  # -- Affinity for query-scheduler pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Hard node and soft zone anti-affinity
-  affinity: |
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchLabels:
-              {{- include "loki.querySchedulerSelectorLabels" . | nindent 10 }}
-          topologyKey: kubernetes.io/hostname
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                {{- include "loki.querySchedulerSelectorLabels" . | nindent 12 }}
-            topologyKey: failure-domain.beta.kubernetes.io/zone
-  # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: 1
-  # -- Node selector for query-scheduler pods
-  nodeSelector: {}
-  # -- Tolerations for query-scheduler pods
-  tolerations: []
-  # -- Set the optional grpc service protocol. Ex: "grpc", "http2" or "https"
-  appProtocol:
-    grpc: ""
+    ## configmap-reload resource requests and limits
+    ## Ref: http://kubernetes.io/docs/user-guide/compute-resources/
+    ##
+    resources: {}
 
-# Configuration for the table-manager
-tableManager:
-  # -- Specifies whether the table-manager should be enabled
-  enabled: false
-  # -- hostAliases to add
-  hostAliases: []
-  #  - ip: 1.2.3.4
-  #    hostnames:
-  #      - domain.tld
-  image:
-    # -- The Docker registry for the table-manager image. Overrides `loki.image.registry`
-    registry: null
-    # -- Docker image repository for the table-manager image. Overrides `loki.image.repository`
-    repository: null
-    # -- Docker image tag for the table-manager image. Overrides `loki.image.tag`
-    tag: null
-  # -- Command to execute instead of defined in Docker image
-  command: null
-  # -- The name of the PriorityClass for table-manager pods
-  priorityClassName: null
-  # -- Labels for table-manager pods
-  podLabels: {}
-  # -- Annotations for table-manager pods
-  podAnnotations: {}
-  # -- Labels for table-manager service
-  serviceLabels: {}
-  # -- Additional CLI args for the table-manager
-  extraArgs: []
-  # -- Environment variables to add to the table-manager pods
-  extraEnv: []
-  # -- Environment variables from secrets or configmaps to add to the table-manager pods
-  extraEnvFrom: []
-  # -- Volume mounts to add to the table-manager pods
-  extraVolumeMounts: []
-  # -- Volumes to add to the table-manager pods
-  extraVolumes: []
-  # -- Resource requests and limits for the table-manager
-  resources: {}
-  # -- Containers to add to the table-manager pods
-  extraContainers: []
-  # -- Grace period to allow the table-manager to shutdown before it is killed
-  terminationGracePeriodSeconds: 30
-  # -- Affinity for table-manager pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Hard node and soft zone anti-affinity
-  affinity: |
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchLabels:
-              {{- include "loki.tableManagerSelectorLabels" . | nindent 10 }}
-          topologyKey: kubernetes.io/hostname
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                {{- include "loki.tableManagerSelectorLabels" . | nindent 12 }}
-            topologyKey: failure-domain.beta.kubernetes.io/zone
-  # -- Node selector for table-manager pods
-  nodeSelector: {}
-  # -- Tolerations for table-manager pods
-  tolerations: []
+server:
+  ## Prometheus server container name
+  ##
+  name: server
 
-# Use either this ingress or the gateway, but not both at once.
-# If you enable this, make sure to disable the gateway.
-# You'll need to supply authn configuration for your ingress controller.
-ingress:
-  enabled: false
-#  ingressClassName: nginx
-  annotations: {}
-#    nginx.ingress.kubernetes.io/auth-type: basic
-#    nginx.ingress.kubernetes.io/auth-secret: loki-distributed-basic-auth
-#    nginx.ingress.kubernetes.io/auth-secret-type: auth-map
-#    nginx.ingress.kubernetes.io/configuration-snippet: |
-#      proxy_set_header X-Scope-OrgID $remote_user;
-  paths:
-    distributor:
-      - /api/prom/push
-      - /loki/api/v1/push
-    querier:
-      - /api/prom/tail
-      - /loki/api/v1/tail
-    query-frontend:
-      - /loki/api
-    ruler:
-      - /api/prom/rules
-      - /loki/api/v1/rules
-      - /prometheus/api/v1/rules
-      - /prometheus/api/v1/alerts
-  hosts:
-    - loki.example.com
-  # tls:
-  #   - secretName: loki-distributed-tls
-  #     hosts:
-  #       - loki.example.com
+  ## Opt out of automounting Kubernetes API credentials.
+  ## If set it will override serviceAccounts.server.automountServiceAccountToken value for ServiceAccount.
+  # automountServiceAccountToken: false
 
-# Configuration for the gateway
-gateway:
-  # -- Specifies whether the gateway should be enabled
-  enabled: true
-  # -- hostAliases to add
-  hostAliases: []
-  #  - ip: 1.2.3.4
-  #    hostnames:
-  #      - domain.tld
-  # -- Number of replicas for the gateway
-  replicas: 1
-  # -- Enable logging of 2xx and 3xx HTTP requests
-  verboseLogging: true
-  autoscaling:
-    # -- Enable autoscaling for the gateway
-    enabled: false
-    # -- Minimum autoscaling replicas for the gateway
-    minReplicas: 1
-    # -- Maximum autoscaling replicas for the gateway
-    maxReplicas: 3
-    # -- Target CPU utilisation percentage for the gateway
-    targetCPUUtilizationPercentage: 60
-    # -- Target memory utilisation percentage for the gateway
-    targetMemoryUtilizationPercentage: null
-    # -- Allows one to define custom metrics using the HPA/v2 schema (for example, Resource, Object or External metrics)
-    customMetrics: []
-    # - type: Object
-    #   object:
-    #     metric:
-    #       name: requests-per-second
-    #     describedObject:
-    #       apiVersion: networking.k8s.io/v1
-    #       kind: Ingress
-    #       name: main-route
-    #     target:
-    #       type: Values
-    #       averageValue: 10k
-    behavior:
-      # -- Enable autoscaling behaviours
-      enabled: false
-      # -- define scale down policies, must conform to HPAScalingRules
-      scaleDown: {}
-      # -- define scale up policies, must conform to HPAScalingRules
-      scaleUp: {}
-  # -- See `kubectl explain deployment.spec.strategy` for more,
-  # ref: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
-  deploymentStrategy:
-    type: RollingUpdate
+  ## Use a ClusterRole (and ClusterRoleBinding)
+  ## - If set to false - we define a RoleBinding in the defined namespaces ONLY
+  ##
+  ## NB: because we need a Role with nonResourceURL's ("/metrics") - you must get someone with Cluster-admin privileges to define this role for you, before running with this setting enabled.
+  ##     This makes prometheus work - for users who do not have ClusterAdmin privs, but wants prometheus to operate on their own namespaces, instead of clusterwide.
+  ##
+  ## You MUST also set namespaces to the ones you have access to and want monitored by Prometheus.
+  ##
+  # useExistingClusterRoleName: nameofclusterrole
+
+  ## If set it will override prometheus.server.fullname value for ClusterRole and ClusterRoleBinding
+  ##
+  clusterRoleNameOverride: ""
+
+  # Enable only the release namespace for monitoring. By default all namespaces are monitored.
+  # If releaseNamespace and namespaces are both set a merged list will be monitored.
+  releaseNamespace: false
+
+  ## namespaces to monitor (instead of monitoring all - clusterwide). Needed if you want to run without Cluster-admin privileges.
+  # namespaces:
+  #   - yournamespace
+
+  # sidecarContainers - add more containers to prometheus server
+  # Key/Value where Key is the sidecar `- name: <Key>`
+  # Example:
+  #   sidecarContainers:
+  #      webserver:
+  #        image: nginx
+  # OR for adding OAuth authentication to Prometheus
+  #   sidecarContainers:
+  #     oauth-proxy:
+  #       image: quay.io/oauth2-proxy/oauth2-proxy:v7.1.2
+  #       args:
+  #       - --upstream=http://127.0.0.1:9090
+  #       - --http-address=0.0.0.0:8081
+  #       - ...
+  #       ports:
+  #       - containerPort: 8081
+  #         name: oauth-proxy
+  #         protocol: TCP
+  #       resources: {}
+  sidecarContainers: {}
+
+  # sidecarTemplateValues - context to be used in template for sidecarContainers
+  # Example:
+  #   sidecarTemplateValues: *your-custom-globals
+  #   sidecarContainers:
+  #     webserver: |-
+  #       {{ include "webserver-container-template" . }}
+  # Template for `webserver-container-template` might looks like this:
+  #   image: "{{ .Values.server.sidecarTemplateValues.repository }}:{{ .Values.server.sidecarTemplateValues.tag }}"
+  #   ...
+  #
+  sidecarTemplateValues: {}
+
+  ## Prometheus server container image
+  ##
   image:
-    # -- The Docker registry for the gateway image
-    registry: docker.io
-    # -- The gateway image repository
-    repository: nginxinc/nginx-unprivileged
-    # -- The gateway image tag
-    tag: 1.20.2-alpine
-    # -- The gateway image pull policy
+    repository: quay.io/prometheus/prometheus
+    # if not set appVersion field from Chart.yaml is used
+    tag: ""
+    # When digest is set to a non-empty value, images will be pulled by digest (regardless of tag value).
+    digest: ""
     pullPolicy: IfNotPresent
-  # -- The name of the PriorityClass for gateway pods
-  priorityClassName: null
-  # -- Labels for gateway pods
-  podLabels: {}
-  # -- Annotations for gateway pods
-  podAnnotations: {}
-  # -- Additional CLI args for the gateway
-  extraArgs: []
-  # -- Environment variables to add to the gateway pods
-  extraEnv: []
-  # -- Environment variables from secrets or configmaps to add to the gateway pods
-  extraEnvFrom: []
-  # -- Volumes to add to the gateway pods
-  extraVolumes: []
-  # -- Volume mounts to add to the gateway pods
+
+  ## Prometheus server command
+  ##
+  command: []
+
+  ## prometheus server priorityClassName
+  ##
+  priorityClassName: ""
+
+  ## EnableServiceLinks indicates whether information about services should be injected
+  ## into pod's environment variables, matching the syntax of Docker links.
+  ## WARNING: the field is unsupported and will be skipped in K8s prior to v1.13.0.
+  ##
+  enableServiceLinks: true
+
+  ## The URL prefix at which the container can be accessed. Useful in the case the '-web.external-url' includes a slug
+  ## so that the various internal URLs are still able to access as they are in the default case.
+  ## (Optional)
+  prefixURL: ""
+
+  ## External URL which can access prometheus
+  ## Maybe same with Ingress host name
+  baseURL: ""
+
+  ## Additional server container environment variables
+  ##
+  ## You specify this manually like you would a raw deployment manifest.
+  ## This means you can bind in environment variables from secrets.
+  ##
+  ## e.g. static environment variable:
+  ##  - name: DEMO_GREETING
+  ##    value: "Hello from the environment"
+  ##
+  ## e.g. secret environment variable:
+  ## - name: USERNAME
+  ##   valueFrom:
+  ##     secretKeyRef:
+  ##       name: mysecret
+  ##       key: username
+  env: []
+
+  # List of flags to override default parameters, e.g:
+  # - --enable-feature=agent
+  # - --storage.agent.retention.max-time=30m
+  # - --config.file=/etc/config/prometheus.yml
+  defaultFlagsOverride: []
+
+  extraFlags:
+    - web.enable-lifecycle
+    ## web.enable-admin-api flag controls access to the administrative HTTP API which includes functionality such as
+    ## deleting time series. This is disabled by default.
+    # - web.enable-admin-api
+    ##
+    ## storage.tsdb.no-lockfile flag controls BD locking
+    # - storage.tsdb.no-lockfile
+    ##
+    ## storage.tsdb.wal-compression flag enables compression of the write-ahead log (WAL)
+    # - storage.tsdb.wal-compression
+
+  ## Path to a configuration file on prometheus server container FS
+  configPath: /etc/config/prometheus.yml
+
+  ### The data directory used by prometheus to set --storage.tsdb.path
+  ### When empty server.persistentVolume.mountPath is used instead
+  storagePath: ""
+
+  global:
+    ## How frequently to scrape targets by default
+    ##
+    scrape_interval: 1m
+    ## How long until a scrape request times out
+    ##
+    scrape_timeout: 10s
+    ## How frequently to evaluate rules
+    ##
+    evaluation_interval: 1m
+  ## https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write
+  ##
+  remoteWrite: []
+  ## https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_read
+  ##
+  remoteRead: []
+
+  ## https://prometheus.io/docs/prometheus/latest/configuration/configuration/#tsdb
+  ##
+  tsdb: {}
+    # out_of_order_time_window: 0s
+
+  ## https://prometheus.io/docs/prometheus/latest/configuration/configuration/#exemplars
+  ## Must be enabled via --enable-feature=exemplar-storage
+  ##
+  exemplars: {}
+    # max_exemplars: 100000
+
+  ## Custom HTTP headers for Liveness/Readiness/Startup Probe
+  ##
+  ## Useful for providing HTTP Basic Auth to healthchecks
+  probeHeaders: []
+    # - name: "Authorization"
+    #   value: "Bearer ABCDEabcde12345"
+
+  ## Additional Prometheus server container arguments
+  ## Set to null for argumentless flags
+  ##
+  extraArgs: {}
+    # web.enable-remote-write-receiver: null
+
+  ## Additional InitContainers to initialize the pod
+  ##
+  extraInitContainers: []
+
+  ## Additional Prometheus server Volume mounts
+  ##
   extraVolumeMounts: []
-  # -- The SecurityContext for gateway containers
-  podSecurityContext:
-    fsGroup: 101
-    runAsGroup: 101
-    runAsNonRoot: true
-    runAsUser: 101
-  # -- The SecurityContext for gateway containers
-  containerSecurityContext:
-    readOnlyRootFilesystem: true
-    capabilities:
-      drop:
-        - ALL
-    allowPrivilegeEscalation: false
-  # -- Resource requests and limits for the gateway
-  resources: {}
-  # -- Containers to add to the gateway pods
-  extraContainers: []
-  # -- Grace period to allow the gateway to shutdown before it is killed
-  terminationGracePeriodSeconds: 30
-  # -- Affinity for gateway pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Hard node and soft zone anti-affinity
-  affinity: |
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchLabels:
-              {{- include "loki.gatewaySelectorLabels" . | nindent 10 }}
-          topologyKey: kubernetes.io/hostname
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                {{- include "loki.gatewaySelectorLabels" . | nindent 12 }}
-            topologyKey: failure-domain.beta.kubernetes.io/zone
-  # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
-  # -- Node selector for gateway pods
-  nodeSelector: {}
-  # -- Tolerations for gateway pods
-  tolerations: []
-  # -- DNSConfig for gateway pods
-  dnsConfig: {}
-  # Gateway service configuration
-  service:
-    # -- Port of the gateway service
-    port: 80
-    # -- Type of the gateway service
-    type: ClusterIP
-    # -- ClusterIP of the gateway service
-    clusterIP: null
-    # -- Node port if service type is NodePort
-    nodePort: null
-    # -- Load balancer IPO address if service type is LoadBalancer
-    loadBalancerIP: null
-    # -- Load balancer allow traffic from CIDR list if service type is LoadBalancer
-    loadBalancerSourceRanges: []
-    # -- Set appProtocol for the service
-    appProtocol: null
-    # -- Annotations for the gateway service
-    annotations: {}
-    # -- Labels for gateway service
-    labels: {}
-  # Gateway ingress configuration
+
+  ## Additional Prometheus server Volumes
+  ##
+  extraVolumes: []
+
+  ## Additional Prometheus server hostPath mounts
+  ##
+  extraHostPathMounts: []
+    # - name: certs-dir
+    #   mountPath: /etc/kubernetes/certs
+    #   subPath: ""
+    #   hostPath: /etc/kubernetes/certs
+    #   readOnly: true
+
+  extraConfigmapMounts: []
+    # - name: certs-configmap
+    #   mountPath: /prometheus
+    #   subPath: ""
+    #   configMap: certs-configmap
+    #   readOnly: true
+
+  ## Additional Prometheus server Secret mounts
+  # Defines additional mounts with secrets. Secrets must be manually created in the namespace.
+  extraSecretMounts: []
+    # - name: secret-files
+    #   mountPath: /etc/secrets
+    #   subPath: ""
+    #   secretName: prom-secret-files
+    #   readOnly: true
+
+  ## ConfigMap override where fullname is {{.Release.Name}}-{{.Values.server.configMapOverrideName}}
+  ## Defining configMapOverrideName will cause templates/server-configmap.yaml
+  ## to NOT generate a ConfigMap resource
+  ##
+  configMapOverrideName: ""
+
+  ## Extra labels for Prometheus server ConfigMap (ConfigMap that holds serverFiles)
+  extraConfigmapLabels: {}
+
+  ## Override the prometheus.server.fullname for all objects related to the Prometheus server
+  fullnameOverride: ""
+
   ingress:
-    # -- Specifies whether an ingress for the gateway should be created
+    ## If true, Prometheus server Ingress will be created
+    ##
     enabled: false
-    # -- Ingress Class Name. MAY be required for Kubernetes versions >= 1.18
-    # For example: `ingressClassName: nginx`
-    ingressClassName: ''
 
-    # -- Annotations for the gateway ingress
+    # For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
+    # See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
+    # ingressClassName: nginx
+
+    ## Prometheus server Ingress annotations
+    ##
     annotations: {}
-    # -- Hosts configuration for the gateway ingress
-    hosts:
-      - host: gateway.loki.example.com
-        paths:
-          - path: /
-            # -- pathType (e.g. ImplementationSpecific, Prefix, .. etc.) might also be required by some Ingress Controllers
-            # pathType: Prefix
-    # -- TLS configuration for the gateway ingress
+    #   kubernetes.io/ingress.class: nginx
+    #   kubernetes.io/tls-acme: 'true'
+
+    ## Prometheus server Ingress additional labels
+    ##
+    extraLabels: {}
+
+    ## Redirect ingress to an additional defined port on the service
+    # servicePort: 8081
+
+    ## Prometheus server Ingress hostnames with optional path (passed through tpl)
+    ## Must be provided if Ingress is enabled
+    ##
+    hosts: []
+    #   - prometheus.domain.com
+    #   - domain.com/prometheus
+
+    path: /
+
+    # pathType is only for k8s >= 1.18
+    pathType: Prefix
+
+    ## Extra paths to prepend to every host configuration. This is useful when working with annotation based services. (passed through tpl)
+    extraPaths: []
+    # - path: /*
+    #   backend:
+    #     serviceName: ssl-redirect
+    #     servicePort: use-annotation
+
+    ## Prometheus server Ingress TLS configuration (hosts passed through tpl)
+    ## Secrets must be manually created in the namespace
+    ##
     tls: []
-    # tls:
-    #   - secretName: loki-gateway-tls
+    #   - secretName: prometheus-server-tls
     #     hosts:
-    #       - gateway.loki.example.com
+    #       - prometheus.domain.com
 
-  # Basic auth configuration
-  basicAuth:
-    # -- Enables basic authentication for the gateway
-    enabled: false
-    # -- The basic auth username for the gateway
-    username: null
-    # -- The basic auth password for the gateway
-    password: null
-    # -- Uses the specified username and password to compute a htpasswd using Sprig's `htpasswd` function.
-    # The value is templated using `tpl`. Override this to use a custom htpasswd, e.g. in case the default causes
-    # high CPU load.
-    # @default -- See values.yaml
-    htpasswd: >-
-      {{ htpasswd (required "'gateway.basicAuth.username' is required" .Values.gateway.basicAuth.username) (required "'gateway.basicAuth.password' is required" .Values.gateway.basicAuth.password) }}
-    # -- Existing basic auth secret to use. Must contain '.htpasswd'
-    existingSecret: null
-  # Configures the readiness probe for the gateway
-  readinessProbe:
-    httpGet:
-      path: /
-      port: http
-    initialDelaySeconds: 15
-    timeoutSeconds: 1
-  livenessProbe:
-    httpGet:
-      path: /
-      port: http
-    initialDelaySeconds: 30
-  nginxConfig:
-    # -- NGINX log format
-    # @default -- See values.yaml
-    logFormat: |-
-      main '$remote_addr - $remote_user [$time_local]  $status '
-              '"$request" $body_bytes_sent "$http_referer" '
-              '"$http_user_agent" "$http_x_forwarded_for"';
-    # -- Allows appending custom configuration to the server block
-    serverSnippet: ""
-    # -- Allows appending custom configuration to the http block
-    httpSnippet: ""
-    # -- Allows overriding the DNS resolver address nginx will use.
-    resolver: ""
-    # -- Config file contents for Nginx. Passed through the `tpl` function to allow templating
-    # @default -- See values.yaml
-    file: |
-      worker_processes  5;  ## Default: 1
-      error_log  /dev/stderr;
-      pid        /tmp/nginx.pid;
-      worker_rlimit_nofile 8192;
+  ## Server Deployment Strategy type
+  strategy:
+    type: Recreate
 
-      events {
-        worker_connections  4096;  ## Default: 1024
-      }
-
-      http {
-        client_body_temp_path /tmp/client_temp;
-        proxy_temp_path       /tmp/proxy_temp_path;
-        fastcgi_temp_path     /tmp/fastcgi_temp;
-        uwsgi_temp_path       /tmp/uwsgi_temp;
-        scgi_temp_path        /tmp/scgi_temp;
-
-        proxy_http_version    1.1;
-
-        default_type application/octet-stream;
-        log_format   {{ .Values.gateway.nginxConfig.logFormat }}
-
-        {{- if .Values.gateway.verboseLogging }}
-        access_log   /dev/stderr  main;
-        {{- else }}
-
-        map $status $loggable {
-          ~^[23]  0;
-          default 1;
-        }
-        access_log   /dev/stderr  main  if=$loggable;
-        {{- end }}
-
-        sendfile     on;
-        tcp_nopush   on;
-        {{- if .Values.gateway.nginxConfig.resolver }}
-        resolver {{ .Values.gateway.nginxConfig.resolver }};
-        {{- else }}
-        resolver {{ .Values.global.dnsService }}.{{ .Values.global.dnsNamespace }}.svc.{{ .Values.global.clusterDomain }};
-        {{- end }}
-
-        {{- with .Values.gateway.nginxConfig.httpSnippet }}
-        {{ . | nindent 2 }}
-        {{- end }}
-
-        server {
-          listen             8080;
-
-          {{- if .Values.gateway.basicAuth.enabled }}
-          auth_basic           "Loki";
-          auth_basic_user_file /etc/nginx/secrets/.htpasswd;
-          {{- end }}
-
-          location = / {
-            return 200 'OK';
-            auth_basic off;
-            access_log off;
-          }
-
-          location = /api/prom/push {
-            set $api_prom_push_backend http://{{ include "loki.distributorFullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }};
-            proxy_pass       $api_prom_push_backend:3100$request_uri;
-            proxy_http_version 1.1;
-          }
-
-          location = /api/prom/tail {
-            set $api_prom_tail_backend http://{{ include "loki.querierFullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }};
-            proxy_pass       $api_prom_tail_backend:3100$request_uri;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_http_version 1.1;
-          }
-
-          # Ruler
-          location ~ /prometheus/api/v1/alerts.* {
-            set $prometheus_api_v1_alerts_backend http://{{ include "loki.rulerFullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }};
-            proxy_pass       $prometheus_api_v1_alerts_backend:3100$request_uri;
-          }
-          location ~ /prometheus/api/v1/rules.* {
-            set $prometheus_api_v1_rules_backend http://{{ include "loki.rulerFullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }};
-            proxy_pass       $prometheus_api_v1_rules_backend:3100$request_uri;
-          }
-          location ~ /api/prom/rules.* {
-            set $api_prom_rules_backend http://{{ include "loki.rulerFullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }};
-            proxy_pass       $api_prom_rules_backend:3100$request_uri;
-          }
-          location ~ /api/prom/alerts.* {
-            set $api_prom_alerts_backend http://{{ include "loki.rulerFullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }};
-            proxy_pass       $api_prom_alerts_backend:3100$request_uri;
-          }
-
-          location ~ /api/prom/.* {
-            set $api_prom_backend http://{{ include "loki.queryFrontendFullname" . }}-headless.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }};
-            proxy_pass       $api_prom_backend:3100$request_uri;
-            proxy_http_version 1.1;
-          }
-
-          location = /loki/api/v1/push {
-            set $loki_api_v1_push_backend http://{{ include "loki.distributorFullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }};
-            proxy_pass       $loki_api_v1_push_backend:3100$request_uri;
-            proxy_http_version 1.1;
-          }
-
-          location = /loki/api/v1/tail {
-            set $loki_api_v1_tail_backend http://{{ include "loki.querierFullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }};
-            proxy_pass       $loki_api_v1_tail_backend:3100$request_uri;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_http_version 1.1;
-          }
-
-          location ~ /loki/api/.* {
-            set $loki_api_backend http://{{ include "loki.queryFrontendFullname" . }}-headless.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }};
-            proxy_pass       $loki_api_backend:3100$request_uri;
-            proxy_http_version 1.1;
-          }
-
-          {{- with .Values.gateway.nginxConfig.serverSnippet }}
-          {{ . | nindent 4 }}
-          {{- end }}
-        }
-      }
-
-# Configuration for the compactor
-compactor:
-  # -- Kind of deployment [StatefulSet/Deployment]
-  kind: StatefulSet
-  # -- Number of replicas for the compactor
-  replicas: 1
-  # -- Specifies whether compactor should be enabled
-  enabled: false
-  # -- hostAliases to add
+  ## hostAliases allows adding entries to /etc/hosts inside the containers
   hostAliases: []
-  #  - ip: 1.2.3.4
-  #    hostnames:
-  #      - domain.tld
-  image:
-    # -- The Docker registry for the compactor image. Overrides `loki.image.registry`
-    registry: null
-    # -- Docker image repository for the compactor image. Overrides `loki.image.repository`
-    repository: null
-    # -- Docker image tag for the compactor image. Overrides `loki.image.tag`
-    tag: null
-  # -- Command to execute instead of defined in Docker image
-  command: null
-  # -- The name of the PriorityClass for compactor pods
-  priorityClassName: null
-  # -- Labels for compactor pods
-  podLabels: {}
-  # -- Annotations for compactor pods
-  podAnnotations: {}
-  # -- Affinity for compactor pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Hard node and soft zone anti-affinity
-  affinity: |
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchLabels:
-              {{- include "loki.compactorSelectorLabels" . | nindent 10 }}
-          topologyKey: kubernetes.io/hostname
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                {{- include "loki.compactorSelectorLabels" . | nindent 12 }}
-            topologyKey: failure-domain.beta.kubernetes.io/zone
-  # -- Labels for compactor service
-  serviceLabels: {}
-  # -- Additional CLI args for the compactor
-  extraArgs: []
-  # -- Environment variables to add to the compactor pods
-  extraEnv: []
-  # -- Environment variables from secrets or configmaps to add to the compactor pods
-  extraEnvFrom: []
-  # -- Volume mounts to add to the compactor pods
-  extraVolumeMounts: []
-  # -- Volumes to add to the compactor pods
-  extraVolumes: []
-  # -- readiness probe settings for ingester pods. If empty, use `loki.readinessProbe`
-  readinessProbe: {}
-  # -- liveness probe settings for ingester pods. If empty use `loki.livenessProbe`
-  livenessProbe: {}
-  # -- Resource requests and limits for the compactor
-  resources: {}
-  # -- Containers to add to the compactor pods
-  extraContainers: []
-  # -- Init containers to add to the compactor pods
-  initContainers: []
-  # -- Grace period to allow the compactor to shutdown before it is killed
-  terminationGracePeriodSeconds: 30
-  # -- Node selector for compactor pods
-  nodeSelector: {}
-  # -- Tolerations for compactor pods
+  #   - ip: "127.0.0.1"
+  #     hostnames:
+  #       - "example.com"
+
+  ## Node tolerations for server scheduling to nodes with taints
+  ## Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+  ##
   tolerations: []
-  # -- Set the optional grpc service protocol. Ex: "grpc", "http2" or "https"
-  appProtocol:
-    grpc: ""
-  persistence:
-    # -- Enable creating PVCs for the compactor
+    # - key: "key"
+    #   operator: "Equal|Exists"
+    #   value: "value"
+    #   effect: "NoSchedule|PreferNoSchedule|NoExecute(1.6 only)"
+
+  ## Node labels for Prometheus server pod assignment
+  ## Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+  ##
+  nodeSelector: {}
+
+  ## Pod affinity
+  ##
+  affinity: {}
+
+  ## Pod anti-affinity can prevent the scheduler from placing Prometheus server replicas on the same node.
+  ## The value "soft" means that the scheduler should *prefer* to not schedule two replica pods onto the same node but no guarantee is provided.
+  ## The value "hard" means that the scheduler is *required* to not schedule two replica pods onto the same node.
+  ## The default value "" will disable pod anti-affinity so that no anti-affinity rules will be configured (unless set in `server.affinity`).
+  ##
+  podAntiAffinity: ""
+
+  ## If anti-affinity is enabled sets the topologyKey to use for anti-affinity.
+  ## This can be changed to, for example, failure-domain.beta.kubernetes.io/zone
+  ##
+  podAntiAffinityTopologyKey: kubernetes.io/hostname
+
+  ## Pod topology spread constraints
+  ## ref. https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+
+  ## PodDisruptionBudget settings
+  ## ref: https://kubernetes.io/docs/concepts/workloads/pods/disruptions/
+  ##
+  podDisruptionBudget:
     enabled: false
-    # -- Size of persistent disk
-    size: 10Gi
-    # -- Storage class to be used.
-    # If defined, storageClassName: <storageClass>.
-    # If set to "-", storageClassName: "", which disables dynamic provisioning.
-    # If empty or set to null, no storageClassName spec is
-    # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: null
-    # -- Annotations for compactor PVCs
-    annotations: {}
-    # -- List of the compactor PVCs
-    # @notationType -- list
-    claims:
-      - name: data
-        size: 10Gi
-        #   -- Storage class to be used.
-        #   If defined, storageClassName: <storageClass>.
-        #   If set to "-", storageClassName: "", which disables dynamic provisioning.
-        #   If empty or set to null, no storageClassName spec is
-        #   set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-        storageClass: null
-      # - name: wal
-      #   size: 150Gi
-    # -- Enable StatefulSetAutoDeletePVC feature
-    enableStatefulSetAutoDeletePVC: false
-    whenDeleted: Retain
-    whenScaled: Retain
+    # maxUnavailable: 1
+    # minAvailable: 1
+    ## unhealthyPodEvictionPolicy is available since 1.27.0 (beta)
+    ## https://kubernetes.io/docs/tasks/run-application/configure-pdb/#unhealthy-pod-eviction-policy
+    # unhealthyPodEvictionPolicy: IfHealthyBudget
 
-  serviceAccount:
-    create: false
-    # -- The name of the ServiceAccount to use for the compactor.
-    # If not set and create is true, a name is generated by appending
-    # "-compactor" to the common ServiceAccount.
-    name: null
-    # -- Image pull secrets for the compactor service account
-    imagePullSecrets: []
-    # -- Annotations for the compactor service account
-    annotations: {}
-    # -- Set this toggle to false to opt out of automounting API credentials for the service account
-    automountServiceAccountToken: true
+  ## Use an alternate scheduler, e.g. "stork".
+  ## ref: https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers/
+  ##
+  # schedulerName:
 
-# Configuration for the ruler
-ruler:
-  # -- Specifies whether the ruler should be enabled
-  enabled: false
-  # -- Kind of deployment [StatefulSet/Deployment]
-  kind: Deployment
-  # -- Number of replicas for the ruler
-  replicas: 1
-  # -- hostAliases to add
-  hostAliases: []
-  #  - ip: 1.2.3.4
-  #    hostnames:
-  #      - domain.tld
-  image:
-    # -- The Docker registry for the ruler image. Overrides `loki.image.registry`
-    registry: null
-    # -- Docker image repository for the ruler image. Overrides `loki.image.repository`
-    repository: null
-    # -- Docker image tag for the ruler image. Overrides `loki.image.tag`
-    tag: null
-  # -- Command to execute instead of defined in Docker image
-  command: null
-  # -- The name of the PriorityClass for ruler pods
-  priorityClassName: null
-  # -- Labels for compactor pods
-  podLabels: {}
-  # -- Annotations for ruler pods
+  persistentVolume:
+    ## If true, Prometheus server will create/use a Persistent Volume Claim
+    ## If false, use emptyDir
+    ##
+    enabled: true
+
+    ## If set it will override the name of the created persistent volume claim
+    ## generated by the stateful set.
+    ##
+    statefulSetNameOverride: ""
+
+    ## Prometheus server data Persistent Volume access modes
+    ## Must match those of existing PV or dynamic provisioner
+    ## Ref: http://kubernetes.io/docs/user-guide/persistent-volumes/
+    ##
+    accessModes:
+      - ReadWriteOnce
+
+    ## Prometheus server data Persistent Volume labels
+    ##
+    labels: {}
+
+    ## Prometheus server data Persistent Volume annotations
+    ##
+    annotations: {}
+
+    ## Prometheus server data Persistent Volume existing claim name
+    ## Requires server.persistentVolume.enabled: true
+    ## If defined, PVC must be created manually before volume will be bound
+    existingClaim: ""
+
+    ## Prometheus server data Persistent Volume mount root path
+    ##
+    mountPath: /data
+
+    ## Prometheus server data Persistent Volume size
+    ##
+    size: 8Gi
+
+    ## Prometheus server data Persistent Volume Storage Class
+    ## If defined, storageClassName: <storageClass>
+    ## If set to "-", storageClassName: "", which disables dynamic provisioning
+    ## If undefined (the default) or set to null, no storageClassName spec is
+    ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+    ##   GKE, AWS & OpenStack)
+    ##
+    # storageClass: "-"
+
+    ## Prometheus server data Persistent Volume Binding Mode
+    ## If defined, volumeBindingMode: <volumeBindingMode>
+    ## If undefined (the default) or set to null, no volumeBindingMode spec is
+    ##   set, choosing the default mode.
+    ##
+    # volumeBindingMode: ""
+
+    ## Subdirectory of Prometheus server data Persistent Volume to mount
+    ## Useful if the volume's root directory is not empty
+    ##
+    subPath: ""
+
+    ## Persistent Volume Claim Selector
+    ## Useful if Persistent Volumes have been provisioned in advance
+    ## Ref: https://kubernetes.io/docs/concepts/storage/persistent-volumes/#selector
+    ##
+    # selector:
+    #  matchLabels:
+    #    release: "stable"
+    #  matchExpressions:
+    #    - { key: environment, operator: In, values: [ dev ] }
+
+    ## Persistent Volume Name
+    ## Useful if Persistent Volumes have been provisioned in advance and you want to use a specific one
+    ##
+    # volumeName: ""
+
+  emptyDir:
+    ## Prometheus server emptyDir volume size limit
+    ##
+    sizeLimit: ""
+
+  ## Annotations to be added to Prometheus server pods
+  ##
   podAnnotations: {}
-  # -- Labels for ruler service
-  serviceLabels: {}
-  # -- Additional CLI args for the ruler
-  extraArgs: []
-  # -- Environment variables to add to the ruler pods
-  extraEnv: []
-  # -- Environment variables from secrets or configmaps to add to the ruler pods
-  extraEnvFrom: []
-  # -- Volume mounts to add to the ruler pods
-  extraVolumeMounts: []
-  # -- Volumes to add to the ruler pods
-  extraVolumes: []
-  # -- Resource requests and limits for the ruler
+    # iam.amazonaws.com/role: prometheus
+
+  ## Labels to be added to Prometheus server pods
+  ##
+  podLabels: {}
+
+  ## Prometheus AlertManager configuration
+  ##
+  alertmanagers: []
+
+  ## Specify if a Pod Security Policy for node-exporter must be created
+  ## Ref: https://kubernetes.io/docs/concepts/policy/pod-security-policy/
+  ##
+  podSecurityPolicy:
+    annotations: {}
+      ## Specify pod annotations
+      ## Ref: https://kubernetes.io/docs/concepts/policy/pod-security-policy/#apparmor
+      ## Ref: https://kubernetes.io/docs/concepts/policy/pod-security-policy/#seccomp
+      ## Ref: https://kubernetes.io/docs/concepts/policy/pod-security-policy/#sysctl
+      ##
+      # seccomp.security.alpha.kubernetes.io/allowedProfileNames: '*'
+      # seccomp.security.alpha.kubernetes.io/defaultProfileName: 'docker/default'
+      # apparmor.security.beta.kubernetes.io/defaultProfileName: 'runtime/default'
+
+  ## Use a StatefulSet if replicaCount needs to be greater than 1 (see below)
+  ##
+  replicaCount: 1
+
+  ## Number of old history to retain to allow rollback
+  ## Default Kubernetes value is set to 10
+  ##
+  revisionHistoryLimit: 10
+
+  ## Annotations to be added to ConfigMap
+  ##
+  configMapAnnotations: {}
+
+  ## Annotations to be added to deployment
+  ##
+  deploymentAnnotations: {}
+
+  statefulSet:
+    ## If true, use a statefulset instead of a deployment for pod management.
+    ## This allows to scale replicas to more than 1 pod
+    ##
+    enabled: false
+
+    annotations: {}
+    labels: {}
+    podManagementPolicy: OrderedReady
+
+    ## Alertmanager headless service to use for the statefulset
+    ##
+    headless:
+      annotations: {}
+      labels: {}
+      servicePort: 80
+      ## Enable gRPC port on service to allow auto discovery with thanos-querier
+      gRPC:
+        enabled: false
+        servicePort: 10901
+        # nodePort: 10901
+
+    ## Statefulset's persistent volume claim retention policy
+    ## pvcDeleteOnStsDelete and pvcDeleteOnStsScale determine whether
+    ## statefulset's PVCs are deleted (true) or retained (false) on scaling down
+    ## and deleting statefulset, respectively. Requires 1.27.0+.
+    ## Ref: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
+    ##
+    pvcDeleteOnStsDelete: false
+    pvcDeleteOnStsScale: false
+
+  ## Prometheus server readiness and liveness probe initial delay and timeout
+  ## Ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+  ##
+  tcpSocketProbeEnabled: false
+  probeScheme: HTTP
+  readinessProbeInitialDelay: 30
+  readinessProbePeriodSeconds: 5
+  readinessProbeTimeout: 4
+  readinessProbeFailureThreshold: 3
+  readinessProbeSuccessThreshold: 1
+  livenessProbeInitialDelay: 30
+  livenessProbePeriodSeconds: 15
+  livenessProbeTimeout: 10
+  livenessProbeFailureThreshold: 3
+  livenessProbeSuccessThreshold: 1
+  startupProbe:
+    enabled: false
+    periodSeconds: 5
+    failureThreshold: 30
+    timeoutSeconds: 10
+
+  ## Prometheus server resource requests and limits
+  ## Ref: http://kubernetes.io/docs/user-guide/compute-resources/
+  ##
   resources: {}
-  # -- Containers to add to the ruler pods
-  extraContainers: []
-  # -- Init containers to add to the ruler pods
-  initContainers: []
-  # -- Grace period to allow the ruler to shutdown before it is killed
-  terminationGracePeriodSeconds: 300
-  # -- Affinity for ruler pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Hard node and soft zone anti-affinity
-  affinity: |
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchLabels:
-              {{- include "loki.rulerSelectorLabels" . | nindent 10 }}
-          topologyKey: kubernetes.io/hostname
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                {{- include "loki.rulerSelectorLabels" . | nindent 12 }}
-            topologyKey: failure-domain.beta.kubernetes.io/zone
-  # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
-  # -- Node selector for ruler pods
-  nodeSelector: {}
-  # -- Tolerations for ruler pods
-  tolerations: []
-  # -- DNSConfig for ruler pods
+    # limits:
+    #   cpu: 500m
+    #   memory: 512Mi
+    # requests:
+    #   cpu: 500m
+    #   memory: 512Mi
+
+  # Required for use in managed kubernetes clusters (such as AWS EKS) with custom CNI (such as calico),
+  # because control-plane managed by AWS cannot communicate with pods' IP CIDR and admission webhooks are not working
+  ##
+  hostNetwork: false
+
+  # When hostNetwork is enabled, this will set to ClusterFirstWithHostNet automatically
+  dnsPolicy: ClusterFirst
+
+  # Use hostPort
+  # hostPort: 9090
+
+  # Use portName
+  portName: ""
+
+  ## Vertical Pod Autoscaler config
+  ## Ref: https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler
+  verticalAutoscaler:
+    ## If true a VPA object will be created for the controller (either StatefulSet or Deployemnt, based on above configs)
+    enabled: false
+    # updateMode: "Auto"
+    # containerPolicies:
+    # - containerName: 'prometheus-server'
+
+  # Custom DNS configuration to be added to prometheus server pods
   dnsConfig: {}
-  persistence:
-    # -- Enable creating PVCs which is required when using recording rules
-    enabled: false
-    # -- Size of persistent disk
-    size: 10Gi
-    # -- Storage class to be used.
-    # If defined, storageClassName: <storageClass>.
-    # If set to "-", storageClassName: "", which disables dynamic provisioning.
-    # If empty or set to null, no storageClassName spec is
-    # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: null
-    # -- Annotations for ruler PVCs
-    annotations: {}
-  # -- Set the optional grpc service protocol. Ex: "grpc", "http2" or "https"
-  appProtocol:
-    grpc: ""
-  # -- Directories containing rules files
-  directories: {}
-    # tenant_foo:
-    #   rules1.txt: |
-    #     groups:
-    #       - name: should_fire
-    #         rules:
-    #           - alert: HighPercentageError
-    #             expr: |
-    #               sum(rate({app="foo", env="production"} |= "error" [5m])) by (job)
-    #                 /
-    #               sum(rate({app="foo", env="production"}[5m])) by (job)
-    #                 > 0.05
-    #             for: 10m
-    #             labels:
-    #               severity: warning
-    #             annotations:
-    #               summary: High error rate
-    #       - name: credentials_leak
-    #         rules:
-    #           - alert: http-credentials-leaked
-    #             annotations:
-    #               message: "{{ $labels.job }} is leaking http basic auth credentials."
-    #             expr: 'sum by (cluster, job, pod) (count_over_time({namespace="prod"} |~ "http(s?)://(\\w+):(\\w+)@" [5m]) > 0)'
-    #             for: 10m
-    #             labels:
-    #               severity: critical
-    #   rules2.txt: |
-    #     groups:
-    #       - name: example
-    #         rules:
-    #         - alert: HighThroughputLogStreams
-    #           expr: sum by(container) (rate({job=~"loki-dev/.*"}[1m])) > 1000
-    #           for: 2m
-    # tenant_bar:
-    #   rules1.txt: |
-    #     groups:
-    #       - name: should_fire
-    #         rules:
-    #           - alert: HighPercentageError
-    #             expr: |
-    #               sum(rate({app="foo", env="production"} |= "error" [5m])) by (job)
-    #                 /
-    #               sum(rate({app="foo", env="production"}[5m])) by (job)
-    #                 > 0.05
-    #             for: 10m
-    #             labels:
-    #               severity: warning
-    #             annotations:
-    #               summary: High error rate
-    #       - name: credentials_leak
-    #         rules:
-    #           - alert: http-credentials-leaked
-    #             annotations:
-    #               message: "{{ $labels.job }} is leaking http basic auth credentials."
-    #             expr: 'sum by (cluster, job, pod) (count_over_time({namespace="prod"} |~ "http(s?)://(\\w+):(\\w+)@" [5m]) > 0)'
-    #             for: 10m
-    #             labels:
-    #               severity: critical
-    #   rules2.txt: |
-    #     groups:
-    #       - name: example
-    #         rules:
-    #         - alert: HighThroughputLogStreams
-    #           expr: sum by(container) (rate({job=~"loki-dev/.*"}[1m])) > 1000
-    #           for: 2m
+    # nameservers:
+    #   - 1.2.3.4
+    # searches:
+    #   - ns1.svc.cluster-domain.example
+    #   - my.dns.search.suffix
+    # options:
+    #   - name: ndots
+    #     value: "2"
+  #   - name: edns0
 
-# Configuration for the index-gateway
-indexGateway:
-  # -- Specifies whether the index-gateway should be enabled
-  enabled: false
-  # -- Number of replicas for the index-gateway
-  replicas: 1
-  # -- Whether the index gateway should join the memberlist hashring
-  joinMemberlist: true
-  # -- hostAliases to add
-  hostAliases: []
-  #  - ip: 1.2.3.4
-  #    hostnames:
-  #      - domain.tld
-  image:
-    # -- The Docker registry for the index-gateway image. Overrides `loki.image.registry`
-    registry: null
-    # -- Docker image repository for the index-gateway image. Overrides `loki.image.repository`
-    repository: null
-    # -- Docker image tag for the index-gateway image. Overrides `loki.image.tag`
-    tag: null
-  # -- The name of the PriorityClass for index-gateway pods
-  priorityClassName: null
-  # -- Labels for index-gateway pods
-  podLabels: {}
-  # -- Annotations for index-gateway pods
-  podAnnotations: {}
-  # -- Labels for index-gateway service
-  serviceLabels: {}
-  # -- Additional CLI args for the index-gateway
-  extraArgs: []
-  # -- Environment variables to add to the index-gateway pods
-  extraEnv: []
-  # -- Environment variables from secrets or configmaps to add to the index-gateway pods
-  extraEnvFrom: []
-  # -- Volume mounts to add to the index-gateway pods
-  extraVolumeMounts: []
-  # -- Volumes to add to the index-gateway pods
-  extraVolumes: []
-  # -- Resource requests and limits for the index-gateway
-  resources: {}
-  # -- Containers to add to the index-gateway pods
-  extraContainers: []
-  # -- Init containers to add to the index-gateway pods
-  initContainers: []
-  # -- Grace period to allow the index-gateway to shutdown before it is killed.
-  terminationGracePeriodSeconds: 300
-  # -- Affinity for index-gateway pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Hard node and soft zone anti-affinity
-  affinity: |
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchLabels:
-              {{- include "loki.indexGatewaySelectorLabels" . | nindent 10 }}
-          topologyKey: kubernetes.io/hostname
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                {{- include "loki.indexGatewaySelectorLabels" . | nindent 12 }}
-            topologyKey: failure-domain.beta.kubernetes.io/zone
-  # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
-  # -- Node selector for index-gateway pods
-  nodeSelector: {}
-  # -- Tolerations for index-gateway pods
-  tolerations: []
-  persistence:
-    # -- Enable creating PVCs which is required when using boltdb-shipper
-    enabled: false
-    # -- Use emptyDir with ramdisk for storage. **Please note that all data in indexGateway will be lost on pod restart**
-    inMemory: false
-    # -- Size of persistent or memory disk
-    size: 10Gi
-    # -- Storage class to be used.
-    # If defined, storageClassName: <storageClass>.
-    # If set to "-", storageClassName: "", which disables dynamic provisioning.
-    # If empty or set to null, no storageClassName spec is
-    # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: null
-    # -- Annotations for index gateway PVCs
-    annotations: {}
-    # -- Enable StatefulSetAutoDeletePVC feature
-    enableStatefulSetAutoDeletePVC: false
-    whenDeleted: Retain
-    whenScaled: Retain
-  # -- Set the optional grpc service protocol. Ex: "grpc", "http2" or "https"
-  appProtocol:
-    grpc: ""
-
-memcached:
-  readinessProbe:
-    tcpSocket:
-      port: http
-    initialDelaySeconds: 5
-    timeoutSeconds: 1
-  livenessProbe:
-    tcpSocket:
-      port: http
-    initialDelaySeconds: 10
-  image:
-    # -- The Docker registry for the memcached
-    registry: docker.io
-    # -- Memcached Docker image repository
-    repository: memcached
-    # -- Memcached Docker image tag
-    tag: 1.6.21-alpine
-    # -- Memcached Docker image pull policy
-    pullPolicy: IfNotPresent
-  # -- Labels for memcached pods
-  podLabels: {}
-  # -- The SecurityContext for memcached pods
-  podSecurityContext:
-    fsGroup: 11211
-    runAsGroup: 11211
+  ## Security context to be added to server pods
+  ##
+  securityContext:
+    runAsUser: 65534
     runAsNonRoot: true
-    runAsUser: 11211
-  # -- The SecurityContext for memcached containers
-  containerSecurityContext:
-    readOnlyRootFilesystem: true
-    capabilities:
-      drop:
-        - ALL
-    allowPrivilegeEscalation: false
-  # -- Common annotations for all memcached services
-  serviceAnnotations: {}
-  # -- Adds the appProtocol field to the memcached services. This allows memcached to work with istio protocol selection. Ex: "http" or "tcp"
-  appProtocol: ""
+    runAsGroup: 65534
+    fsGroup: 65534
 
-memcachedExporter:
-  # -- Specifies whether the Memcached Exporter should be enabled
-  enabled: false
-  image:
-    # -- The Docker registry for the Memcached Exporter
-    registry: docker.io
-    # -- Memcached Exporter Docker image repository
-    repository: prom/memcached-exporter
-    # -- Memcached Exporter Docker image tag
-    tag: v0.13.0
-    # -- Memcached Exporter Docker image pull policy
-    pullPolicy: IfNotPresent
-  # -- Labels for memcached-exporter pods
-  podLabels: {}
-  # -- Memcached Exporter resource requests and limits
-  resources: {}
-  # -- The SecurityContext for memcachedExporter containers
-  containerSecurityContext:
-    readOnlyRootFilesystem: true
-    capabilities:
-      drop:
-        - ALL
-    allowPrivilegeEscalation: false
+  ## Security context to be added to server container
+  ##
+  containerSecurityContext: {}
 
-memcachedChunks:
-  # -- Specifies whether the Memcached chunks cache should be enabled
-  enabled: false
-  # -- hostAliases to add
-  hostAliases: []
-  #  - ip: 1.2.3.4
-  #    hostnames:
-  #      - domain.tld
-  # -- Number of replicas for memcached-chunks
-  replicas: 1
-  # -- The name of the PriorityClass for memcached-chunks pods
-  priorityClassName: null
-  # -- Labels for memcached-chunks pods
-  podLabels: {}
-  # -- Annotations for memcached-chunks pods
-  podAnnotations: {}
-  # -- Labels for memcached-chunks service
-  serviceLabels: {}
-  # -- Additional CLI args for memcached-chunks
-  extraArgs:
-    - -I 32m
-  # -- Environment variables to add to memcached-chunks pods
-  extraEnv: []
-  # -- Environment variables from secrets or configmaps to add to memcached-chunks pods
-  extraEnvFrom: []
-  # -- Resource requests and limits for memcached-chunks
-  resources: {}
-  # -- Containers to add to the memcached-chunks pods
-  extraContainers: []
-  # -- Grace period to allow memcached-chunks to shutdown before it is killed
-  terminationGracePeriodSeconds: 30
-  # -- Affinity for memcached-chunks pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Hard node and soft zone anti-affinity
-  affinity: |
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchLabels:
-              {{- include "loki.memcachedChunksSelectorLabels" . | nindent 10 }}
-          topologyKey: kubernetes.io/hostname
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                {{- include "loki.memcachedChunksSelectorLabels" . | nindent 12 }}
-            topologyKey: failure-domain.beta.kubernetes.io/zone
-  # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
-  # -- Node selector for memcached-chunks pods
-  nodeSelector: {}
-  # -- Tolerations for memcached-chunks pods
-  tolerations: []
-  persistence:
-    # -- Enable creating PVCs which will persist cached data through restarts
-    enabled: false
-    # -- Size of persistent or memory disk
-    size: 10Gi
-    # -- Storage class to be used.
-    # If defined, storageClassName: <storageClass>.
-    # If set to "-", storageClassName: "", which disables dynamic provisioning.
-    # If empty or set to null, no storageClassName spec is
-    # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: null
-  # -- List of additional PVCs to be created for the memcached-chunks statefulset
-  volumeClaimTemplates: []
-  # -- List of additional volumes to be mounted for the memcached-chunks statefulset
-  extraVolumeMounts: []
+  service:
+    ## If false, no Service will be created for the Prometheus server
+    ##
+    enabled: true
 
-memcachedFrontend:
-  # -- Specifies whether the Memcached frontend cache should be enabled
-  enabled: false
-  # -- hostAliases to add
-  hostAliases: []
-  #  - ip: 1.2.3.4
-  #    hostnames:
-  #      - domain.tld
-  # -- Number of replicas for memcached-frontend
-  replicas: 1
-  # -- The name of the PriorityClass for memcached-frontend pods
-  priorityClassName: null
-  # -- Labels for memcached-frontend pods
-  podLabels: {}
-  # -- Annotations for memcached-frontend pods
-  podAnnotations: {}
-  # -- Labels for memcached-frontend service
-  serviceLabels: {}
-  # -- Additional CLI args for memcached-frontend
-  extraArgs:
-    - -I 32m
-  # -- Environment variables to add to memcached-frontend pods
-  extraEnv: []
-  # -- Environment variables from secrets or configmaps to add to memcached-frontend pods
-  extraEnvFrom: []
-  # -- Resource requests and limits for memcached-frontend
-  resources: {}
-  # -- Containers to add to the memcached-frontend pods
-  extraContainers: []
-  # -- Grace period to allow memcached-frontend to shutdown before it is killed
-  terminationGracePeriodSeconds: 30
-  # -- Affinity for memcached-frontend pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Hard node and soft zone anti-affinity
-  affinity: |
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchLabels:
-              {{- include "loki.memcachedFrontendSelectorLabels" . | nindent 10 }}
-          topologyKey: kubernetes.io/hostname
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                {{- include "loki.memcachedFrontendSelectorLabels" . | nindent 12 }}
-            topologyKey: failure-domain.beta.kubernetes.io/zone
-  # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: 1
-  # -- Node selector for memcached-frontend pods
-  nodeSelector: {}
-  # -- Tolerations for memcached-frontend pods
-  tolerations: []
-  persistence:
-    # -- Enable creating PVCs which will persist cached data through restarts
-    enabled: false
-    # -- Size of persistent or memory disk
-    size: 10Gi
-    # -- Storage class to be used.
-    # If defined, storageClassName: <storageClass>.
-    # If set to "-", storageClassName: "", which disables dynamic provisioning.
-    # If empty or set to null, no storageClassName spec is
-    # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: null
+    annotations: {}
+    labels: {}
+    clusterIP: ""
 
-memcachedIndexQueries:
-  # -- Specifies whether the Memcached index queries cache should be enabled
-  enabled: false
-  # -- Number of replicas for memcached-index-queries
-  replicas: 1
-  # -- hostAliases to add
-  hostAliases: []
-  #  - ip: 1.2.3.4
-  #    hostnames:
-  #      - domain.tld
-  # -- The name of the PriorityClass for memcached-index-queries pods
-  priorityClassName: null
-  # -- Labels for memcached-index-queries pods
-  podLabels: {}
-  # -- Annotations for memcached-index-queries pods
-  podAnnotations: {}
-  # -- Labels for memcached-index-queries service
-  serviceLabels: {}
-  # -- Additional CLI args for memcached-index-queries
-  extraArgs:
-    - -I 32m
-  # -- Environment variables to add to memcached-index-queries pods
-  extraEnv: []
-  # -- Environment variables from secrets or configmaps to add to memcached-index-queries pods
-  extraEnvFrom: []
-  # -- Resource requests and limits for memcached-index-queries
-  resources: {}
-  # -- Containers to add to the memcached-index-queries pods
-  extraContainers: []
-  # -- Grace period to allow memcached-index-queries to shutdown before it is killed
-  terminationGracePeriodSeconds: 30
-  # -- Affinity for memcached-index-queries pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Hard node and soft zone anti-affinity
-  affinity: |
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchLabels:
-              {{- include "loki.memcachedIndexQueriesSelectorLabels" . | nindent 10 }}
-          topologyKey: kubernetes.io/hostname
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                {{- include "loki.memcachedIndexQueriesSelectorLabels" . | nindent 12 }}
-            topologyKey: failure-domain.beta.kubernetes.io/zone
-  # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
-  # -- Node selector for memcached-index-queries pods
-  nodeSelector: {}
-  # -- Tolerations for memcached-index-queries pods
-  tolerations: []
-  persistence:
-    # -- Enable creating PVCs which will persist cached data through restarts
-    enabled: false
-    # -- Size of persistent or memory disk
-    size: 10Gi
-    # -- Storage class to be used.
-    # If defined, storageClassName: <storageClass>.
-    # If set to "-", storageClassName: "", which disables dynamic provisioning.
-    # If empty or set to null, no storageClassName spec is
-    # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: null
+    ## List of IP addresses at which the Prometheus server service is available
+    ## Ref: https://kubernetes.io/docs/concepts/services-networking/service/#external-ips
+    ##
+    externalIPs: []
 
-memcachedIndexWrites:
-  # -- Specifies whether the Memcached index writes cache should be enabled
-  enabled: false
-  # -- Number of replicas for memcached-index-writes
-  replicas: 1
-  # -- hostAliases to add
-  hostAliases: []
-  #  - ip: 1.2.3.4
-  #    hostnames:
-  #      - domain.tld
-  # -- The name of the PriorityClass for memcached-index-writes pods
-  priorityClassName: null
-  # -- Labels for memcached-index-writes pods
-  podLabels: {}
-  # -- Annotations for memcached-index-writes pods
-  podAnnotations: {}
-  # -- Labels for memcached-index-writes service
-  serviceLabels: {}
-  # -- Additional CLI args for memcached-index-writes
-  extraArgs:
-    - -I 32m
-  # -- Environment variables to add to memcached-index-writes pods
-  extraEnv: []
-  # -- Environment variables from secrets or configmaps to add to memcached-index-writes pods
-  extraEnvFrom: []
-  # -- Resource requests and limits for memcached-index-writes
-  resources: {}
-  # -- Containers to add to the memcached-index-writes pods
-  extraContainers: []
-  # -- Grace period to allow memcached-index-writes to shutdown before it is killed
-  terminationGracePeriodSeconds: 30
-  # -- Affinity for memcached-index-writes pods. Passed through `tpl` and, thus, to be configured as string
-  # @default -- Hard node and soft zone anti-affinity
-  affinity: |
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - labelSelector:
-            matchLabels:
-              {{- include "loki.memcachedIndexWritesSelectorLabels" . | nindent 10 }}
-          topologyKey: kubernetes.io/hostname
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                {{- include "loki.memcachedIndexWritesSelectorLabels" . | nindent 12 }}
-            topologyKey: failure-domain.beta.kubernetes.io/zone
-  # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
-  # -- Node selector for memcached-index-writes pods
-  nodeSelector: {}
-  # -- Tolerations for memcached-index-writes pods
-  tolerations: []
-  persistence:
-    # -- Enable creating PVCs which will persist cached data through restarts
-    enabled: false
-    # -- Size of persistent or memory disk
-    size: 10Gi
-    # -- Storage class to be used.
-    # If defined, storageClassName: <storageClass>.
-    # If set to "-", storageClassName: "", which disables dynamic provisioning.
-    # If empty or set to null, no storageClassName spec is
-    # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: null
+    loadBalancerIP: ""
+    loadBalancerSourceRanges: []
+    servicePort: 80
+    sessionAffinity: None
+    type: ClusterIP
+
+    ## Enable gRPC port on service to allow auto discovery with thanos-querier
+    gRPC:
+      enabled: false
+      servicePort: 10901
+      # nodePort: 10901
+
+    ## If using a statefulSet (statefulSet.enabled=true), configure the
+    ## service to connect to a specific replica to have a consistent view
+    ## of the data.
+    statefulsetReplica:
+      enabled: false
+      replica: 0
+
+    ## Additional port to define in the Service
+    additionalPorts: []
+    # additionalPorts:
+    # - name: authenticated
+    #   port: 8081
+    #   targetPort: 8081
+
+  ## Prometheus server pod termination grace period
+  ##
+  terminationGracePeriodSeconds: 300
+
+  ## Prometheus data retention period (default if not specified is 15 days)
+  ##
+  retention: "15d"
+
+  ## Prometheus' data retention size. Supported units: B, KB, MB, GB, TB, PB, EB.
+  ##
+  retentionSize: ""
+
+## Prometheus server ConfigMap entries for rule files (allow prometheus labels interpolation)
+ruleFiles: {}
+
+## Prometheus server ConfigMap entries for scrape_config_files
+## (allows scrape configs defined in additional files)
+##
+scrapeConfigFiles: []
+
+## Prometheus server ConfigMap entries
+##
+serverFiles:
+  ## Alerts configuration
+  ## Ref: https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
+  alerting_rules.yml: {}
+  # groups:
+  #   - name: Instances
+  #     rules:
+  #       - alert: InstanceDown
+  #         expr: up == 0
+  #         for: 5m
+  #         labels:
+  #           severity: page
+  #         annotations:
+  #           description: '{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 5 minutes.'
+  #           summary: 'Instance {{ $labels.instance }} down'
+  ## DEPRECATED DEFAULT VALUE, unless explicitly naming your files, please use alerting_rules.yml
+  alerts: {}
+
+  ## Records configuration
+  ## Ref: https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/
+  recording_rules.yml: {}
+  ## DEPRECATED DEFAULT VALUE, unless explicitly naming your files, please use recording_rules.yml
+  rules: {}
+
+  prometheus.yml:
+    rule_files:
+      - /etc/config/recording_rules.yml
+      - /etc/config/alerting_rules.yml
+    ## Below two files are DEPRECATED will be removed from this default values file
+      - /etc/config/rules
+      - /etc/config/alerts
+
+    scrape_configs:
+      - job_name: prometheus
+        static_configs:
+          - targets:
+            - localhost:9090
+
+      # A scrape configuration for running Prometheus on a Kubernetes cluster.
+      # This uses separate scrape configs for cluster components (i.e. API server, node)
+      # and services to allow each to use different authentication configs.
+      #
+      # Kubernetes labels will be added as Prometheus labels on metrics via the
+      # `labelmap` relabeling action.
+
+      # Scrape config for API servers.
+      #
+      # Kubernetes exposes API servers as endpoints to the default/kubernetes
+      # service so this uses `endpoints` role and uses relabelling to only keep
+      # the endpoints associated with the default/kubernetes service using the
+      # default named port `https`. This works for single API server deployments as
+      # well as HA API server deployments.
+      - job_name: 'kubernetes-apiservers'
+
+        kubernetes_sd_configs:
+          - role: endpoints
+
+        # Default to scraping over https. If required, just disable this or change to
+        # `http`.
+        scheme: https
+
+        # This TLS & bearer token file config is used to connect to the actual scrape
+        # endpoints for cluster components. This is separate to discovery auth
+        # configuration because discovery & scraping are two separate concerns in
+        # Prometheus. The discovery auth config is automatic if Prometheus runs inside
+        # the cluster. Otherwise, more config options have to be provided within the
+        # <kubernetes_sd_config>.
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          # If your node certificates are self-signed or use a different CA to the
+          # master CA, then disable certificate verification below. Note that
+          # certificate verification is an integral part of a secure infrastructure
+          # so this should only be disabled in a controlled environment. You can
+          # disable certificate verification by uncommenting the line below.
+          #
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        # Keep only the default/kubernetes service endpoints for the https port. This
+        # will add targets for each API server which Kubernetes adds an endpoint to
+        # the default/kubernetes service.
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: default;kubernetes;https
+
+      - job_name: 'kubernetes-nodes'
+
+        # Default to scraping over https. If required, just disable this or change to
+        # `http`.
+        scheme: https
+
+        # This TLS & bearer token file config is used to connect to the actual scrape
+        # endpoints for cluster components. This is separate to discovery auth
+        # configuration because discovery & scraping are two separate concerns in
+        # Prometheus. The discovery auth config is automatic if Prometheus runs inside
+        # the cluster. Otherwise, more config options have to be provided within the
+        # <kubernetes_sd_config>.
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          # If your node certificates are self-signed or use a different CA to the
+          # master CA, then disable certificate verification below. Note that
+          # certificate verification is an integral part of a secure infrastructure
+          # so this should only be disabled in a controlled environment. You can
+          # disable certificate verification by uncommenting the line below.
+          #
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        kubernetes_sd_configs:
+          - role: node
+
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/$1/proxy/metrics
+
+
+      - job_name: 'kubernetes-nodes-cadvisor'
+
+        # Default to scraping over https. If required, just disable this or change to
+        # `http`.
+        scheme: https
+
+        # This TLS & bearer token file config is used to connect to the actual scrape
+        # endpoints for cluster components. This is separate to discovery auth
+        # configuration because discovery & scraping are two separate concerns in
+        # Prometheus. The discovery auth config is automatic if Prometheus runs inside
+        # the cluster. Otherwise, more config options have to be provided within the
+        # <kubernetes_sd_config>.
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          # If your node certificates are self-signed or use a different CA to the
+          # master CA, then disable certificate verification below. Note that
+          # certificate verification is an integral part of a secure infrastructure
+          # so this should only be disabled in a controlled environment. You can
+          # disable certificate verification by uncommenting the line below.
+          #
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        kubernetes_sd_configs:
+          - role: node
+
+        # This configuration will work only on kubelet 1.7.3+
+        # As the scrape endpoints for cAdvisor have changed
+        # if you are using older version you need to change the replacement to
+        # replacement: /api/v1/nodes/$1:4194/proxy/metrics
+        # more info here https://github.com/coreos/prometheus-operator/issues/633
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+
+        # Metric relabel configs to apply to samples before ingestion.
+        # [Metric Relabeling](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#metric_relabel_configs)
+        # metric_relabel_configs:
+        # - action: labeldrop
+        #   regex: (kubernetes_io_hostname|failure_domain_beta_kubernetes_io_region|beta_kubernetes_io_os|beta_kubernetes_io_arch|beta_kubernetes_io_instance_type|failure_domain_beta_kubernetes_io_zone)
+
+      # Scrape config for service endpoints.
+      #
+      # The relabeling allows the actual service scrape endpoint to be configured
+      # via the following annotations:
+      #
+      # * `prometheus.io/scrape`: Only scrape services that have a value of
+      # `true`, except if `prometheus.io/scrape-slow` is set to `true` as well.
+      # * `prometheus.io/scheme`: If the metrics endpoint is secured then you will need
+      # to set this to `https` & most likely set the `tls_config` of the scrape config.
+      # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+      # * `prometheus.io/port`: If the metrics are exposed on a different port to the
+      # service then set this appropriately.
+      # * `prometheus.io/param_<parameter>`: If the metrics endpoint uses parameters
+      # then you can set any parameter
+      - job_name: 'kubernetes-service-endpoints'
+        honor_labels: true
+
+        kubernetes_sd_configs:
+          - role: endpoints
+
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape_slow]
+            action: drop
+            regex: true
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+            action: replace
+            target_label: __scheme__
+            regex: (https?)
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+            action: replace
+            target_label: __address__
+            regex: (.+?)(?::\d+)?;(\d+)
+            replacement: $1:$2
+          - action: labelmap
+            regex: __meta_kubernetes_service_annotation_prometheus_io_param_(.+)
+            replacement: __param_$1
+          - action: labelmap
+            regex: __meta_kubernetes_service_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_service_name]
+            action: replace
+            target_label: service
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            action: replace
+            target_label: node
+
+      # Scrape config for slow service endpoints; same as above, but with a larger
+      # timeout and a larger interval
+      #
+      # The relabeling allows the actual service scrape endpoint to be configured
+      # via the following annotations:
+      #
+      # * `prometheus.io/scrape-slow`: Only scrape services that have a value of `true`
+      # * `prometheus.io/scheme`: If the metrics endpoint is secured then you will need
+      # to set this to `https` & most likely set the `tls_config` of the scrape config.
+      # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+      # * `prometheus.io/port`: If the metrics are exposed on a different port to the
+      # service then set this appropriately.
+      # * `prometheus.io/param_<parameter>`: If the metrics endpoint uses parameters
+      # then you can set any parameter
+      - job_name: 'kubernetes-service-endpoints-slow'
+        honor_labels: true
+
+        scrape_interval: 5m
+        scrape_timeout: 30s
+
+        kubernetes_sd_configs:
+          - role: endpoints
+
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape_slow]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+            action: replace
+            target_label: __scheme__
+            regex: (https?)
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+            action: replace
+            target_label: __address__
+            regex: (.+?)(?::\d+)?;(\d+)
+            replacement: $1:$2
+          - action: labelmap
+            regex: __meta_kubernetes_service_annotation_prometheus_io_param_(.+)
+            replacement: __param_$1
+          - action: labelmap
+            regex: __meta_kubernetes_service_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_service_name]
+            action: replace
+            target_label: service
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            action: replace
+            target_label: node
+
+      - job_name: 'prometheus-pushgateway'
+        honor_labels: true
+
+        kubernetes_sd_configs:
+          - role: service
+
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_probe]
+            action: keep
+            regex: pushgateway
+
+      # Example scrape config for probing services via the Blackbox Exporter.
+      #
+      # The relabeling allows the actual service scrape endpoint to be configured
+      # via the following annotations:
+      #
+      # * `prometheus.io/probe`: Only probe services that have a value of `true`
+      - job_name: 'kubernetes-services'
+        honor_labels: true
+
+        metrics_path: /probe
+        params:
+          module: [http_2xx]
+
+        kubernetes_sd_configs:
+          - role: service
+
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_probe]
+            action: keep
+            regex: true
+          - source_labels: [__address__]
+            target_label: __param_target
+          - target_label: __address__
+            replacement: blackbox
+          - source_labels: [__param_target]
+            target_label: instance
+          - action: labelmap
+            regex: __meta_kubernetes_service_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_service_name]
+            target_label: service
+
+      # Example scrape config for pods
+      #
+      # The relabeling allows the actual pod scrape endpoint to be configured via the
+      # following annotations:
+      #
+      # * `prometheus.io/scrape`: Only scrape pods that have a value of `true`,
+      # except if `prometheus.io/scrape-slow` is set to `true` as well.
+      # * `prometheus.io/scheme`: If the metrics endpoint is secured then you will need
+      # to set this to `https` & most likely set the `tls_config` of the scrape config.
+      # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+      # * `prometheus.io/port`: Scrape the pod on the indicated port instead of the default of `9102`.
+      - job_name: 'kubernetes-pods'
+        honor_labels: true
+
+        kubernetes_sd_configs:
+          - role: pod
+
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape_slow]
+            action: drop
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scheme]
+            action: replace
+            regex: (https?)
+            target_label: __scheme__
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port, __meta_kubernetes_pod_ip]
+            action: replace
+            regex: (\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})
+            replacement: '[$2]:$1'
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port, __meta_kubernetes_pod_ip]
+            action: replace
+            regex: (\d+);((([0-9]+?)(\.|$)){4})
+            replacement: $2:$1
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_annotation_prometheus_io_param_(.+)
+            replacement: __param_$1
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: Pending|Succeeded|Failed|Completed
+            action: drop
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            action: replace
+            target_label: node
+
+      # Example Scrape config for pods which should be scraped slower. An useful example
+      # would be stackriver-exporter which queries an API on every scrape of the pod
+      #
+      # The relabeling allows the actual pod scrape endpoint to be configured via the
+      # following annotations:
+      #
+      # * `prometheus.io/scrape-slow`: Only scrape pods that have a value of `true`
+      # * `prometheus.io/scheme`: If the metrics endpoint is secured then you will need
+      # to set this to `https` & most likely set the `tls_config` of the scrape config.
+      # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+      # * `prometheus.io/port`: Scrape the pod on the indicated port instead of the default of `9102`.
+      - job_name: 'kubernetes-pods-slow'
+        honor_labels: true
+
+        scrape_interval: 5m
+        scrape_timeout: 30s
+
+        kubernetes_sd_configs:
+          - role: pod
+
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape_slow]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scheme]
+            action: replace
+            regex: (https?)
+            target_label: __scheme__
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port, __meta_kubernetes_pod_ip]
+            action: replace
+            regex: (\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})
+            replacement: '[$2]:$1'
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port, __meta_kubernetes_pod_ip]
+            action: replace
+            regex: (\d+);((([0-9]+?)(\.|$)){4})
+            replacement: $2:$1
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_annotation_prometheus_io_param_(.+)
+            replacement: __param_$1
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: Pending|Succeeded|Failed|Completed
+            action: drop
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            action: replace
+            target_label: node
+
+# adds additional scrape configs to prometheus.yml
+# must be a string so you have to add a | after extraScrapeConfigs:
+# example adds prometheus-blackbox-exporter scrape config
+extraScrapeConfigs: ""
+  # - job_name: 'prometheus-blackbox-exporter'
+  #   metrics_path: /probe
+  #   params:
+  #     module: [http_2xx]
+  #   static_configs:
+  #     - targets:
+  #       - https://example.com
+  #   relabel_configs:
+  #     - source_labels: [__address__]
+  #       target_label: __param_target
+  #     - source_labels: [__param_target]
+  #       target_label: instance
+  #     - target_label: __address__
+  #       replacement: prometheus-blackbox-exporter:9115
+
+# Adds option to add alert_relabel_configs to avoid duplicate alerts in alertmanager
+# useful in H/A prometheus with different external labels but the same alerts
+alertRelabelConfigs: {}
+  # alert_relabel_configs:
+  # - source_labels: [dc]
+  #   regex: (.+)\d+
+  #   target_label: dc
 
 networkPolicy:
-  # -- Specifies whether Network Policies should be created
+  ## Enable creation of NetworkPolicy resources.
+  ##
   enabled: false
-  metrics:
-    # -- Specifies the Pods which are allowed to access the metrics port.
-    # As this is cross-namespace communication, you also need the namespaceSelector.
-    podSelector: {}
-    # -- Specifies the namespaces which are allowed to access the metrics port
-    namespaceSelector: {}
-    # -- Specifies specific network CIDRs which are allowed to access the metrics port.
-    # In case you use namespaceSelector, you also have to specify your kubelet networks here.
-    # The metrics ports are also used for probes.
-    cidrs: []
-  ingress:
-    # -- Specifies the Pods which are allowed to access the http port.
-    # As this is cross-namespace communication, you also need the namespaceSelector.
-    podSelector: {}
-    # -- Specifies the namespaces which are allowed to access the http port
-    namespaceSelector: {}
-  alertmanager:
-    # -- Specify the alertmanager port used for alerting
-    port: 9093
-    # -- Specifies the alertmanager Pods.
-    # As this is cross-namespace communication, you also need the namespaceSelector.
-    podSelector: {}
-    # -- Specifies the namespace the alertmanager is running in
-    namespaceSelector: {}
-  externalStorage:
-    # -- Specify the port used for external storage, e.g. AWS S3
-    ports: []
-    # -- Specifies specific network CIDRs you want to limit access to
-    cidrs: []
-  discovery:
-    # -- Specify the port used for discovery
-    port: null
-    # -- Specifies the Pods labels used for discovery.
-    # As this is cross-namespace communication, you also need the namespaceSelector.
-    podSelector: {}
-    # -- Specifies the namespace the discovery Pods are running in
-    namespaceSelector: {}
+
+# Force namespace of namespaced resources
+forceNamespace: ""
+
+# Extra manifests to deploy as an array
+extraManifests: []
+  # - |
+  #   apiVersion: v1
+  #   kind: ConfigMap
+  #   metadata:
+  #   labels:
+  #     name: prometheus-extra
+  #   data:
+  #     extra-data: "value"
+
+# Configuration of subcharts defined in Chart.yaml
+
+## alertmanager sub-chart configurable values
+## Please see https://github.com/prometheus-community/helm-charts/tree/main/charts/alertmanager
+##
+alertmanager:
+  ## If false, alertmanager will not be installed
+  ##
+  enabled: true
+
+  persistence:
+    size: 2Gi
+
+  podSecurityContext:
+    runAsUser: 65534
+    runAsNonRoot: true
+    runAsGroup: 65534
+    fsGroup: 65534
+
+## kube-state-metrics sub-chart configurable values
+## Please see https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-state-metrics
+##
+kube-state-metrics:
+  ## If false, kube-state-metrics sub-chart will not be installed
+  ##
+  enabled: true
+
+## prometheus-node-exporter sub-chart configurable values
+## Please see https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-node-exporter
+##
+prometheus-node-exporter:
+  ## If false, node-exporter will not be installed
+  ##
+  enabled: true
+
+  rbac:
+    pspEnabled: false
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+
+## prometheus-pushgateway sub-chart configurable values
+## Please see https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-pushgateway
+##
+prometheus-pushgateway:
+  ## If false, pushgateway will not be installed
+  ##
+  enabled: true
+
+  # Optional service annotations
+  serviceAnnotations:
+    prometheus.io/probe: pushgateway
 
