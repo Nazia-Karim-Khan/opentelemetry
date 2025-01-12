@@ -852,7 +852,7 @@ queryFrontend:
     # -- Extra volumes for tempo-query deployment
     extraVolumes: []
     config: |
-      backend: 127.0.0.1:3100
+      backend: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
   # -- Number of replicas for the query-frontend
   replicas: 1
   # -- hostAliases to add
@@ -1165,7 +1165,7 @@ traces:
   otlp:
     http:
       # -- Enable Tempo to ingest Open Telemetry HTTP traces
-      enabled: false
+      enabled: true
       # -- HTTP receiver advanced config
       receiverConfig: {}
     grpc:
@@ -1787,23 +1787,23 @@ prometheusRule:
   #       expr: sum(rate(container_cpu_usage_seconds_total[1m])) by (node, namespace, pod, container)
 
 minio:
-  enabled: false
-  mode: standalone
-  rootUser: grafana-tempo
-  rootPassword: supersecret
+  enabled: true
+  mode: distributed
+  rootUser: minio
+  rootPassword: minio123
   buckets:
     # Default Tempo storage bucket.
     - name: tempo-traces
       policy: none
       purge: false
     # Bucket for traces storage if enterprise.enabled is true - requires license.
-    - name: enterprise-traces
-      policy: none
-      purge: false
-    # Admin client bucket if enterprise.enabled is true - requires license.
-    - name: enterprise-traces-admin
-      policy: none
-      purge: false
+    # - name: enterprise-traces
+    #   policy: none
+    #   purge: false
+    # # Admin client bucket if enterprise.enabled is true - requires license.
+    # - name: enterprise-traces-admin
+    #   policy: none
+    #   purge: false
   persistence:
     size: 5Gi
   resources:

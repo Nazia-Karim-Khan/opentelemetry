@@ -662,6 +662,11 @@ datasources:
      url: http://prometheus-server.prometheus.svc.cluster.local:80
      access: proxy
      isDefault: true
+   - name: Tempo
+     type: tempo
+     url: http://tempo-distributor.tempo.svc.cluster.local:3100
+     access: proxy
+     isDefault: false
 #    - name: CloudWatch
 #      type: cloudwatch
 #      access: proxy

@@ -15,7 +15,7 @@ spec:
 
     exporters:
       prometheusremotewrite:
-        endpoint: http://prometheus-server.prometheus.svc.cluster.local:80/api/v1/write
+        endpoint: http://prometheus-server.prometheus.svc.cluster.local/api/v1/write
         tls:
           insecure: true
       otlphttp/logs:
@@ -23,7 +23,7 @@ spec:
         tls:
           insecure: true
       otlp:
-        endpoint: http://tempo-distributor.tempo.svc.cluster.local:3100
+        endpoint: http://tempo-distributor.tempo.svc.cluster.local:9095
         tls:
           insecure: true
 
