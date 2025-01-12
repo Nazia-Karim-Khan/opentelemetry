@@ -1167,12 +1167,14 @@ traces:
       # -- Enable Tempo to ingest Open Telemetry HTTP traces
       enabled: true
       # -- HTTP receiver advanced config
-      receiverConfig: {}
+      receiverConfig: 
+        endpoint: "0.0.0.0:4318"
     grpc:
       # -- Enable Tempo to ingest Open Telemetry GRPC traces
-      enabled: false
+      enabled: true
       # -- GRPC receiver advanced config
-      receiverConfig: {}
+      receiverConfig: 
+        endpoint: "0.0.0.0:4317"
   opencensus:
     # -- Enable Tempo to ingest Open Census traces
     enabled: false
