@@ -19,7 +19,8 @@ spec:
         tls:
           insecure: true
       otlphttp/logs:
-        endpoint: http://loki-loki-distributed-query-frontend.loki.svc.cluster.local:3100
+        endpoint: http://loki-distributed-distributor.loki.svc.cluster.local:3100/loki/api/v1/push
+
         tls:
           insecure: true
       otlp:
