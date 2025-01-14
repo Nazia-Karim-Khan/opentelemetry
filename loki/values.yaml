@@ -109,7 +109,10 @@ loki:
 
     memberlist:
       join_members:
-        - {{ include "loki.fullname" . }}-memberlist
+        - "loki-distributed-memberlist"
+      bind_port: 7946  # Ensure the port is not blocked
+      gossip_interval: 500ms
+
 
     ingester_client:
       grpc_client_config:
@@ -1634,7 +1637,7 @@ ruler:
 # Configuration for the index-gateway
 indexGateway:
   # -- Specifies whether the index-gateway should be enabled
-  enabled: false
+  enabled: true
   # -- Number of replicas for the index-gateway
   replicas: 1
   # -- Whether the index gateway should join the memberlist hashring

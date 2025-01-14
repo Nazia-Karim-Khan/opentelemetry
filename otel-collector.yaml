@@ -18,9 +18,8 @@ spec:
         endpoint: http://prometheus-server.prometheus.svc.cluster.local/api/v1/write
         tls:
           insecure: true
-      otlphttp/logs:
+      otlphttp/loki:
         endpoint: http://loki-distributed-distributor.loki.svc.cluster.local:3100/loki/api/v1/push
-
         tls:
           insecure: true
       otlp:
@@ -38,5 +37,5 @@ spec:
           exporters: [prometheusremotewrite]
         logs:
           receivers: [otlp]
-          exporters: [otlphttp/logs]
+          exporters: [otlphttp/loki]
 
