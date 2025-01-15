@@ -24,7 +24,7 @@ spec:
             - containerPort: 8080
           env:
             - name: OTEL_SERVICE_NAME
-              value: "accountsvc"
+              value: "springsvc"
             - name: OTEL_TRACES_SAMPLER
               value: "always_on"
             - name: OTEL_TRACES_EXPORTER

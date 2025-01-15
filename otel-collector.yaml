@@ -38,4 +38,3 @@ spec:
         logs:
           receivers: [otlp]
           exporters: [otlphttp/loki]
-
