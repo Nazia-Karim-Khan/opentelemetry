@@ -13,9 +13,9 @@ spec:
     metadata:
       labels:
         app: hello-spring-boot-app
-      annotations:
-        promtail.io/scrape: "true"         
-        promtail.io/labels: "app=springboot"  
+      # annotations:
+      #   promtail.io/scrape: "true"         
+      #   promtail.io/labels: "app=springboot"  
     spec:
       containers:
         - name: hello-spring-boot-app

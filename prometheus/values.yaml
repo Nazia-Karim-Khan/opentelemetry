@@ -795,15 +795,20 @@ serverFiles:
       - /etc/config/rules
       - /etc/config/alerts
 
-    scrape_configs:
-      - job_name: prometheus
-        static_configs:
-          - targets:
-            - localhost:9090
+    # scrape_configs:
+      # - job_name: prometheus
+      #   static_configs:
+      #     - targets:
+            # - localhost:9090
       # - job_name: 'tempo'
       #   static_configs:
       #     - targets: 
       #       - http://tempo-query-frontend.tempo.svc.cluster.local:3100
+    scrape_configs:
+      - job_name: 'otel-collector'
+        scrape_interval: 5s
+        static_configs:
+          - targets: ['opentelemetry-collector-collector-monitoring.opentelemetry:8888']
 
 
       # A scrape configuration for running Prometheus on a Kubernetes cluster.
