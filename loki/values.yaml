@@ -140,7 +140,8 @@ loki:
       max_cache_freshness_per_query: 10m
       split_queries_by_interval: 15m
       retention_period: 4320h
-
+      allow_structured_metadata: true
+      
     {{- if .Values.loki.schemaConfig}}
     schema_config:
     {{- toYaml .Values.loki.schemaConfig | nindent 2}}

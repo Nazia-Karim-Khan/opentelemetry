@@ -33,8 +33,3 @@ service:
       exporters: [ otlphttp/logs ]
 
 
-
-      otlphttp/logs:
-        endpoint: http://loki-loki-distributed-query-frontend.loki.svc.cluster.local:3100
-        tls:
-          insecure: true
