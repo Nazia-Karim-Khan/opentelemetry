@@ -81,11 +81,11 @@ loki:
     runAsUser: 10001
   # -- The SecurityContext for Loki containers
   containerSecurityContext:
-    readOnlyRootFilesystem: true
+    readOnlyRootFilesystem: false
     capabilities:
       drop:
         - ALL
-    allowPrivilegeEscalation: false
+    allowPrivilegeEscalation: true
   # -- Should enableServiceLinks be enabled. Default to enable
   enableServiceLinks: true
   ######################################################################################################################
@@ -451,11 +451,11 @@ loki:
     tsdb_shipper:
       active_index_directory: /data/tsdb-index
       cache_location: /data/tsdb-cache
-  #   aws:
-  #     s3: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
-  #     bucketnames: loki
-  #     region: us-east-1
-  #     s3forcepathstyle: true
+    aws:
+      s3: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
+      bucketnames: loki
+      region: us-east-1
+      s3forcepathstyle: true
   # # -- a real Loki install requires a proper schemaConfig defined above this, however for testing or playing around
   # # you can enable useTestSchema
   # compactor:
@@ -489,12 +489,13 @@ loki:
   query_scheduler: {}
   # -- Additional storage config
   storage_config:
-    boltdb_shipper:
-      index_gateway_client:
-        server_address: 'http://loki-gateway.loki.svc.cluster.local/'
-    tsdb_shipper:
-      index_gateway_client:
-        server_address: 'http://loki-gateway.loki.svc.cluster.local/'
+    # boltdb_shipper:
+    #   active_index_directory: /loki/index
+    #   cache_location: /loki/index_cache
+    #   cache_ttl: 250h
+    # tsdb_shipper:
+    #   active_index_directory: /data/tsdb-index
+    #   cache_location: /data/tsdb-cache
     bloom_shipper:
       working_directory: /var/loki/data/bloomshipper
     hedging:
@@ -920,11 +921,11 @@ adminApi:
     runAsGroup: 10001
     runAsUser: 10001
   containerSecurityContext:
-    readOnlyRootFilesystem: true
+    readOnlyRootFilesystem: false
     capabilities:
       drop:
         - ALL
-    allowPrivilegeEscalation: false
+    allowPrivilegeEscalation: true
   # -- Update strategy
   strategy:
     type: RollingUpdate
@@ -1046,7 +1047,7 @@ gateway:
     runAsUser: 101
   # -- The SecurityContext for gateway containers
   containerSecurityContext:
-    readOnlyRootFilesystem: true
+    readOnlyRootFilesystem: false
     capabilities:
       drop:
         - ALL
@@ -1205,7 +1206,7 @@ enterpriseGateway:
     runAsUser: 10001
     fsGroup: 10001
   containerSecurityContext:
-    readOnlyRootFilesystem: true
+    readOnlyRootFilesystem: false
     capabilities:
       drop:
         - ALL
@@ -3176,7 +3177,7 @@ memcached:
   priorityClassName: null
   # -- The SecurityContext for memcached containers
   containerSecurityContext:
-    readOnlyRootFilesystem: true
+    readOnlyRootFilesystem: false
     capabilities:
       drop: [ALL]
     allowPrivilegeEscalation: false
@@ -3192,7 +3193,7 @@ memcachedExporter:
     limits: {}
   # -- The SecurityContext for memcached exporter containers
   containerSecurityContext:
-    readOnlyRootFilesystem: true
+    readOnlyRootFilesystem: false
     capabilities:
       drop: [ALL]
     allowPrivilegeEscalation: false
@@ -3431,7 +3432,7 @@ rollout_operator:
       type: RuntimeDefault
   # Set the container security context
   securityContext:
-    readOnlyRootFilesystem: true
+    readOnlyRootFilesystem: false
     capabilities:
       drop: [ALL]
     allowPrivilegeEscalation: false
@@ -3525,7 +3526,7 @@ sidecar:
   #     memory: 50Mi
   # -- The SecurityContext for the sidecar.
   securityContext:
-    readOnlyRootFilesystem: true
+    readOnlyRootFilesystem: false
     capabilities:
       drop:
         - ALL
