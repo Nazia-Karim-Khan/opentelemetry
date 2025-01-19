@@ -664,7 +664,7 @@ datasources:
      isDefault: true
    - name: Tempo
      type: tempo
-     url: http://tempo-query-frontend-discovery.tempo.svc.cluster.local:3100
+     url: http://tempo-query-frontend.tempo.svc.cluster.local:3100
      access: proxy
      isDefault: false
    - name: Loki

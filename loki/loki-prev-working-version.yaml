@@ -32,8 +32,6 @@ loki:
   # implement something like the "Wave" controller or another controller that
   # is monitoring top level deployment resources.
   annotations: {}
-  extraArgs:
-  - "config.expand-env=true"
   # Configures the readiness probe for all of the Loki pods
   readinessProbe:
     httpGet:
@@ -52,7 +50,7 @@ loki:
     # -- Docker image repository
     repository: grafana/loki
     # -- Overrides the image tag whose default is the chart's appVersion
-    tag: 3.1.0
+    tag: 2.9.2
     # -- Docker image pull policy
     pullPolicy: IfNotPresent
   # -- Common labels for all pods
@@ -131,12 +129,12 @@ loki:
       chunk_block_size: 262144
       chunk_encoding: snappy
       chunk_retain_period: 1m
-      # max_transfer_retries: 0
+      max_transfer_retries: 0
       wal:
         dir: /var/loki/wal
 
     limits_config:
-      # enforce_metric_name: false
+      enforce_metric_name: false
       reject_old_samples: true
       reject_old_samples_max_age: 168h
       max_cache_freshness_per_query: 10m
@@ -152,7 +150,7 @@ loki:
     storage_config:
     {{- if .Values.indexGateway.enabled}}
     {{- $indexGatewayClient := dict "server_address" (printf "dns:///%s:9095" (include "loki.indexGatewayFullname" .)) }}
-    {{- $_ := set .Values.loki.storageConfig.tsdb_shipper "index_gateway_client" $indexGatewayClient }}
+    {{- $_ := set .Values.loki.storageConfig.boltdb_shipper "index_gateway_client" $indexGatewayClient }}
     {{- end}}
     {{- toYaml .Values.loki.storageConfig | nindent 2}}
     {{- if .Values.memcachedIndexQueries.enabled }}
@@ -167,7 +165,7 @@ loki:
       file: /var/{{ include "loki.name" . }}-runtime/runtime.yaml
 
     chunk_store_config:
-      # max_look_back_period: 0s
+      max_look_back_period: 0s
       {{- if .Values.memcachedChunks.enabled }}
       chunk_cache_config:
         embedded_cache:
@@ -219,29 +217,12 @@ loki:
       tail_proxy_url: http://{{ include "loki.querierFullname" . }}:3100
 
     compactor:
+      shared_store: s3
       working_directory: /loki/compactor
       compaction_interval: 5m
       retention_enabled: true
       retention_delete_delay: 2h
       retention_delete_worker_count: 150
-      # schema_config:
-      #     configs:
-      #       - from: "2025-01-19"
-      #         index:
-      #             period: 24h
-      #             prefix: index_
-      #         object_store: s3
-      #         schema: v13
-      #         store: tsdb
-      # storage_config:
-      #     tsdb_shipper:
-      #         active_index_directory: /data/index
-      #         cache_location: /data/index_cache
-      #     aws:
-      #       s3: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
-      #       bucketnames: loki
-      #       region: us-east-1
-      #       s3forcepathstyle: true
 
     ruler:
       storage:
@@ -261,30 +242,21 @@ loki:
   # -- Check https://grafana.com/docs/loki/latest/configuration/#schema_config for more info on how to configure schemas
   schemaConfig:
     configs:
-      # - from: "2020-01-19"
-      #   store: boltdb-shipper
-      #   object_store: filesystem
-      #   schema: v11
-      #   index:
-      #     prefix: loki_index_
-      #     period: 24h
-      - from: "2025-01-19" 
-        store: tsdb 
-        object_store: s3 
-        schema: v13 
+      - from: "2020-09-07"
+        store: boltdb-shipper
+        object_store: s3
+        schema: v11
         index:
-          prefix: index_
+          prefix: loki_index_
           period: 24h
 
   # -- Check https://grafana.com/docs/loki/latest/configuration/#storage_config for more info on how to configure storages
   storageConfig:
-    # boltdb_shipper:
-    #   active_index_directory: /loki/index
-    #   cache_location: /loki/index_cache
-    #   cache_ttl: 250h
-    tsdb_shipper:
-      active_index_directory: /data/tsdb-index
-      cache_location: /data/tsdb-cache
+    boltdb_shipper:
+      shared_store: s3
+      active_index_directory: /loki/index
+      cache_location: /loki/index_cache
+      cache_ttl: 250h
     aws:
       s3: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
       bucketnames: loki
