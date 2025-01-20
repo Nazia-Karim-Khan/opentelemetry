@@ -139,7 +139,6 @@ loki:
     pattern_ingester:
       enabled: {{ .Values.loki.pattern_ingester.enabled }}
 
-
     distributor:
       ring:
         kvstore:
@@ -344,7 +343,7 @@ loki:
     query_timeout: 300s
     volume_enabled: true
     retention_period: 168h
-    allow_structured_metadata: true
+    allow_structured_metadata: false
   # -- Provides a reloadable runtime configuration file for some specific configuration
   runtimeConfig: {}
   # -- Check https://grafana.com/docs/loki/latest/configuration/#common_config for more info on how to provide a common configuration
@@ -371,40 +370,40 @@ loki:
       # -- Check https://grafana.com/docs/loki/latest/configure/#s3_storage_config for more info on how to provide a backoff_config
       backoff_config: {}
       disable_dualstack: false
-    # gcs:
-    #   chunkBufferSize: 0
-    #   requestTimeout: "0s"
-    #   enableHttp2: true
-    # azure:
-    #   accountName: null
-    #   accountKey: null
-    #   connectionString: null
-    #   useManagedIdentity: false
-    #   useFederatedToken: false
-    #   userAssignedId: null
-    #   requestTimeout: null
-    #   endpointSuffix: null
-    #   chunkDelimiter: null
-    # swift:
-    #   auth_version: null
-    #   auth_url: null
-    #   internal: null
-    #   username: null
-    #   user_domain_name: null
-    #   user_domain_id: null
-    #   user_id: null
-    #   password: null
-    #   domain_id: null
-    #   domain_name: null
-    #   project_id: null
-    #   project_name: null
-    #   project_domain_id: null
-    #   project_domain_name: null
-    #   region_name: null
-    #   container_name: null
-    #   max_retries: null
-    #   connect_timeout: null
-    #   request_timeout: null
+    gcs:
+      chunkBufferSize: 0
+      requestTimeout: "0s"
+      enableHttp2: true
+    azure:
+      accountName: null
+      accountKey: null
+      connectionString: null
+      useManagedIdentity: false
+      useFederatedToken: false
+      userAssignedId: null
+      requestTimeout: null
+      endpointSuffix: null
+      chunkDelimiter: null
+    swift:
+      auth_version: null
+      auth_url: null
+      internal: null
+      username: null
+      user_domain_name: null
+      user_domain_id: null
+      user_id: null
+      password: null
+      domain_id: null
+      domain_name: null
+      project_id: null
+      project_name: null
+      project_domain_id: null
+      project_domain_name: null
+      region_name: null
+      container_name: null
+      max_retries: null
+      connect_timeout: null
+      request_timeout: null
     filesystem:
       chunks_directory: /var/loki/chunks
       rules_directory: /var/loki/rules
@@ -435,39 +434,52 @@ loki:
       #     prefix: loki_index_
       #     period: 24h
       - from: "2025-01-19" 
-        store: tsdb 
+        store: boltdb-shipper 
         object_store: s3 
         schema: v13 
         index:
-          prefix: index_
+          prefix: loki_index
           period: 24h
 
   # -- Check https://grafana.com/docs/loki/latest/configuration/#storage_config for more info on how to configure storages
   storageConfig:
-    # boltdb_shipper:
-    #   active_index_directory: /loki/index
-    #   cache_location: /loki/index_cache
-    #   cache_ttl: 250h
-    tsdb_shipper:
-      active_index_directory: /data/tsdb-index
-      cache_location: /data/tsdb-cache
+    boltdb_shipper:
+      active_index_directory: /var/loki/index
+      cache_location: /var/loki/cache
+      cache_ttl: 24h
+      shared_store: aws
+    # tsdb_shipper:
+    #   active_index_directory: /data/tsdb-index
+    #   cache_location: /data/tsdb-cache
     aws:
+      # access_key: "minio"  # MINIO_ROOT_USER
+      # secret_key: "minio123"  # MINIO_ROOT_PASSWORD
+      bucket: "loki"
       s3: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
-      bucketnames: loki
-      region: us-east-1
-      s3forcepathstyle: true
+      insecure: true
+      s3forcepathstyle: false
+
+
   # # -- a real Loki install requires a proper schemaConfig defined above this, however for testing or playing around
   # # you can enable useTestSchema
-  # compactor:
-  #   retention_enabled: true
-  #   delete_request_store:
-  #     store: s3
-  #     endpoint: http://minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
-  #     bucketnames: loki
-  #     region: us-east-1
-  #     access_key_id: minio
-  #     secret_access_key: minio123
-  #     s3forcepathstyle: true
+  compactor:
+    working_directory: /var/loki/boltdb-shipper-compactor
+    shared_store: aws
+  #   boltdb_shipper:
+  #     directory: /tmp/loki/index
+  #     cache_ttl: 250h
+  # #   retention_enabled: true
+  # #   delete_request_store:
+  #   tsdb_shipper:
+  #     active_index_directory: /data/tsdb-index
+  #     cache_location: /data/tsdb-cache
+  #   aws:
+  #     # access_key: "minio"  # MINIO_ROOT_USER
+  #     # secret_key: "minio123"  # MINIO_ROOT_PASSWORD
+  #     bucket: "loki"
+  #     s3: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
+  #     insecure: true
+  #     s3forcepathstyle: false
 
   useTestSchema: false
   testSchemaConfig:
@@ -489,13 +501,16 @@ loki:
   query_scheduler: {}
   # -- Additional storage config
   storage_config:
-    # boltdb_shipper:
-    #   active_index_directory: /loki/index
-    #   cache_location: /loki/index_cache
-    #   cache_ttl: 250h
     # tsdb_shipper:
     #   active_index_directory: /data/tsdb-index
     #   cache_location: /data/tsdb-cache
+    # aws:
+    #   access_key: "minio"  # MINIO_ROOT_USER
+    #   secret_key: "minio123"  # MINIO_ROOT_PASSWORD
+    #   bucket: "loki"
+    #   endpoint: "minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000"
+    #   insecure: true
+    #   s3forcepathstyle: true
     bloom_shipper:
       working_directory: /var/loki/data/bloomshipper
     hedging:
@@ -1249,7 +1264,7 @@ enterpriseGateway:
 # If you enable this, make sure to disable the gateway.
 # You'll need to supply authn configuration for your ingress controller.
 ingress:
-  enabled: true
+  enabled: false
   ingressClassName: ""
   annotations: {}
   #    nginx.ingress.kubernetes.io/auth-type: basic
@@ -1421,7 +1436,7 @@ singleBinary:
     # If set to "-", storageClassName: "", which disables dynamic provisioning.
     # If empty or set to null, no storageClassName spec is
     # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: null
+    storageClass: openebs-hostpath
     # -- Selector for persistent disk
     selector: null
     # -- Annotations for volume claim
@@ -1550,7 +1565,7 @@ write:
     # If set to "-", storageClassName: "", which disables dynamic provisioning.
     # If empty or set to null, no storageClassName spec is
     # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: null
+    storageClass: openebs-hostpath
     # -- Selector for persistent disk
     selector: null
     # -- Annotations for volume claim
@@ -1660,7 +1675,7 @@ read:
     # If set to "-", storageClassName: "", which disables dynamic provisioning.
     # If empty or set to null, no storageClassName spec is
     # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: null
+    storageClass: openebs-hostpath
     # -- Selector for persistent disk
     selector: null
     # -- Annotations for volume claim
@@ -1770,7 +1785,7 @@ backend:
     # If set to "-", storageClassName: "", which disables dynamic provisioning.
     # If empty or set to null, no storageClassName spec is
     # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: null
+    storageClass: openebs-hostpath
     # -- Selector for persistent disk
     selector: null
     # -- Annotations for volume claim
@@ -1850,7 +1865,13 @@ ingester:
   # -- Volumes to add to the ingester pods
   extraVolumes: []
   # -- Resource requests and limits for the ingester
-  resources: {}
+  resources: 
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
   # -- Containers to add to the ingester pods
   extraContainers: []
   # -- Init containers to add to the ingester pods
@@ -2040,7 +2061,13 @@ distributor:
   # -- Volumes to add to the distributor pods
   extraVolumes: []
   # -- Resource requests and limits for the distributor
-  resources: {}
+  resources: 
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
   # -- Containers to add to the distributor pods
   extraContainers: []
   # -- Grace period to allow the distributor to shutdown before it is killed
