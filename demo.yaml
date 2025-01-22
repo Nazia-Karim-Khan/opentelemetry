@@ -81,11 +81,11 @@ loki:
     runAsUser: 10001
   # -- The SecurityContext for Loki containers
   containerSecurityContext:
-    readOnlyRootFilesystem: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL
-    allowPrivilegeEscalation: true
+    allowPrivilegeEscalation: false
   # -- Should enableServiceLinks be enabled. Default to enable
   enableServiceLinks: true
   ######################################################################################################################
@@ -138,24 +138,6 @@ loki:
 
     pattern_ingester:
       enabled: {{ .Values.loki.pattern_ingester.enabled }}
-
-    distributor:
-      ring:
-        kvstore:
-          store: memberlist
-    ingester:
-      chunk_block_size: 262144
-      chunk_idle_period: 3m
-      chunk_retain_period: 1m
-      lifecycler:
-        ring:
-          kvstore:
-            store: memberlist
-          replication_factor: 3
-
-    # memberlist:
-    #   join_members:
-    #     - loki-memberlist.loki.svc.cluster.local:7946
 
     memberlist:
     {{- if .Values.loki.memberlistConfig }}
@@ -316,11 +298,7 @@ loki:
   # Should authentication be enabled
   auth_enabled: false
   # -- memberlist configuration (overrides embedded default)
-  memberlistConfig: 
-      join_members:
-        - "loki-memberlist.loki.svc.cluster.local:7946"
-      bind_port: 7946  # Ensure the port is not blocked
-      # gossip_interval: 500ms
+  memberlistConfig: {}
   # -- Extra memberlist configuration
   extraMemberlistConfig: {}
   # -- Tenants list to be created on nginx htpasswd file, with name and password keys
@@ -343,39 +321,59 @@ loki:
     query_timeout: 300s
     volume_enabled: true
     retention_period: 168h
-    allow_structured_metadata: false
+    allow_structured_metadata: true
+    max_structured_metadata_entries_count: 256
+    max_query_parallelism: 16  # Increase if under heavy load
   # -- Provides a reloadable runtime configuration file for some specific configuration
   runtimeConfig: {}
   # -- Check https://grafana.com/docs/loki/latest/configuration/#common_config for more info on how to provide a common configuration
   commonConfig:
-    path_prefix: /var/loki
-    replication_factor: 3
+    path_prefix: /var/loki/tmp/loki
+    replication_factor: 1
     compactor_address: '{{ include "loki.compactorAddress" . }}'
-  # -- Storage config. Providing this will automatically populate all necessary storage configs in the templated config.
-    replication_factor: 3
+    instance_addr: 0.0.0.0
+    storage:
+
+      s3:
+        access_key_id: minioadmin
+        bucketnames: loki
+        endpoint: http://minioadmin:minioadmin@otel-minio-hl.minio-tenant.svc.cluster.local:9000
+        insecure: true
+        s3: http://minioadmin:minioadmin@otel-minio-hl.minio-tenant.svc.cluster.local:9000
+        s3forcepathstyle: true
+        secret_access_key: minioadmin
+      filesystem:
+        chunks_directory: /var/loki/tmp/loki/chunks
+        rules_directory: /var/loki/tmp/loki/rules
     ring:
       kvstore:
-        store: memberlist
+        store: etcd
+        etcd:
+          endpoints:
+            - "http://etcd.default.svc.cluster.local:2379"
+          username: root
+          password: 8OeyoWEHKJ
+  # -- Storage config. Providing this will automatically populate all necessary storage configs in the templated config.
   storage:
     # Loki requires a bucket for chunks and the ruler. GEL requires a third bucket for the admin API.
     # Please provide these values if you are using object storage.
-    bucketNames: 
-      chunks: loki # Provide the name for the chunks bucket
-      ruler: test    # Provide the name for the ruler bucket
+    bucketNames:
+      chunks: loki
+      ruler: test
       admin: test
     type: s3
     s3:
-      access_key: minio # MINIO_ROOT_USER
-      secret_key: minio123  # MINIO_ROOT_PASSWORD
-      bucket: loki
-      endpoint: minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
+      s3: http://minioadmin:minioadmin@otel-minio-hl.minio-tenant.svc.cluster.local:9000
+      endpoint: http://minioadmin:minioadmin@otel-minio-hl.minio-tenant.svc.cluster.local:9000
+      region: null
+      secretAccessKey: minioadmin
+      accessKeyId: minioadmin
       signatureVersion: null
       s3ForcePathStyle: true
-      insecure: true
+      insecure: false
       http_config: {}
       # -- Check https://grafana.com/docs/loki/latest/configure/#s3_storage_config for more info on how to provide a backoff_config
       backoff_config: {}
-      disable_dualstack: false
     gcs:
       chunkBufferSize: 0
       requestTimeout: "0s"
@@ -424,7 +422,7 @@ loki:
       batch_size: 256
       parallelism: 10
     results_cache:
-      enabled: true
+      enabled: false
       host: ""
       service: "memcached-client"
       timeout: "500ms"
@@ -432,70 +430,15 @@ loki:
   # -- Check https://grafana.com/docs/loki/latest/configuration/#schema_config for more info on how to configure schemas
   schemaConfig: 
     configs:
-      - from: 2025-01-19
+      - from: 2024-10-24
         store: tsdb
-        object_store: aws
+        object_store: s3
         schema: v13
         index:
           prefix: index_
           period: 24h
-      # - from: "2025-01-19" 
-      #   store: boltdb-shipper 
-      #   object_store: s3 
-      #   schema: v13 
-      #   index:
-      #     prefix: loki_index
-      #     period: 24h
-
-  # -- Check https://grafana.com/docs/loki/latest/configuration/#storage_config for more info on how to configure storages
-  storageConfig:
-    # boltdb_shipper:
-    #   active_index_directory: /var/loki/index
-    #   cache_location: /var/loki/cache
-    #   cache_ttl: 24h
-    #   shared_store: s3
-    tsdb_shipper:
-      active_index_directory: /var/loki/index
-      cache_location: /var/loki/index_cache
-      aws:
-        bucketnames: loki
-        endpoint: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
-        region: us-west-2
-    # s3:
-    #   # access_key: "minio"  # MINIO_ROOT_USER
-    #   # secret_key: "minio123"  # MINIO_ROOT_PASSWORD
-    #   bucket: "loki"
-    #   s3: "http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000"
-    #   insecure: true
-    #   s3forcepathstyle: false
-
-
-  # # -- a real Loki install requires a proper schemaConfig defined above this, however for testing or playing around
-  # # you can enable useTestSchema
-  compactor:
-    working_directory: /var/loki/retention
-    compaction_interval: 10m
-    retention_enabled: true
-    retention_delete_delay: 2h
-    retention_delete_worker_count: 150
-    delete_request_store: aws   
-    # shared_store: s3
-  #   boltdb_shipper:
-  #     directory: /tmp/loki/index
-  #     cache_ttl: 250h
-  # #   retention_enabled: true
-  # #   delete_request_store:
-  #   tsdb_shipper:
-  #     active_index_directory: /data/tsdb-index
-  #     cache_location: /data/tsdb-cache
-  #   aws:
-  #     # access_key: "minio"  # MINIO_ROOT_USER
-  #     # secret_key: "minio123"  # MINIO_ROOT_PASSWORD
-  #     bucket: "loki"
-  #     s3: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
-  #     insecure: true
-  #     s3forcepathstyle: false
-
+  # -- a real Loki install requires a proper schemaConfig defined above this, however for testing or playing around
+  # you can enable useTestSchema
   useTestSchema: false
   testSchemaConfig:
     configs:
@@ -516,16 +459,19 @@ loki:
   query_scheduler: {}
   # -- Additional storage config
   storage_config:
+    tsdb_shipper:
+      index_gateway_client:
+        server_address: '{{ include "loki.indexGatewayAddress" . }}'
+      active_index_directory: /var/loki/index
+      cache_location: /var/loki/index_cache
+      cache_ttl: 250h     
+      
+    boltdb_shipper:
+      index_gateway_client:
+        server_address: '{{ include "loki.indexGatewayAddress" . }}'
     # tsdb_shipper:
-    #   active_index_directory: /data/tsdb-index
-    #   cache_location: /data/tsdb-cache
-    # aws:
-    #   access_key: "minio"  # MINIO_ROOT_USER
-    #   secret_key: "minio123"  # MINIO_ROOT_PASSWORD
-    #   bucket: "loki"
-    #   endpoint: "minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000"
-    #   insecure: true
-    #   s3forcepathstyle: true
+    #   index_gateway_client:
+    #     server_address: '{{ include "loki.indexGatewayAddress" . }}'
     bloom_shipper:
       working_directory: /var/loki/data/bloomshipper
     hedging:
@@ -535,24 +481,28 @@ loki:
   # --  Optional compactor configuration
   compactor: 
     working_directory: /var/loki/data/compactor
-    compaction_interval: 5m
-    # retention_enabled: true
+    compaction_interval: 10m
+    retention_enabled: true
     retention_delete_delay: 2h
     retention_delete_worker_count: 150
+    delete_request_store: s3
   # --  Optional pattern ingester configuration
   pattern_ingester:
     enabled: false
   # --  Optional analytics configuration
-  analytics: {}
+  analytics: 
+    reporting_enabled: false
   # --  Optional querier configuration
-  query_range: {}
+  query_range:
+    parallelise_shardable_queries: true
   # --  Optional querier configuration
   querier: {}
   # --  Optional ingester configuration
   ingester: {}
   # --  Optional index gateway configuration
   index_gateway:
-    mode: distributed
+    mode: simple
+  loki.querySchedulerAddress: "https://loki-query-scheduler.loki.svc.cluster.local:9095"
   frontend:
     scheduler_address: '{{ include "loki.querySchedulerAddress" . }}'
     tail_proxy_url: '{{ include "loki.querierAddress" . }}'
@@ -562,7 +512,7 @@ loki:
   distributor: {}
   # -- Enable tracing
   tracing:
-    enabled: true
+    enabled: false
   bloom_build:
     enabled: false
     builder:
@@ -645,18 +595,8 @@ enterprise:
     targetModule: "tokengen"
     # -- Additional CLI arguments for the `tokengen` target
     extraArgs: []
-      # - 'config.expand-env=true'
     # -- Additional Kubernetes environment
-    env:
-      - name: AWS_ACCESS_KEY_ID
-        value: "minio"
-      - name: AWS_SECRET_ACCESS_KEY
-        value: "minio123"
-      - name: AWS_SDK_LOAD_CONFIG
-        value: "1"
-      - name: AWS_DEBUG
-        value: "1"
-
+    env: []
     # -- Additional labels for the `tokengen` Job
     labels: {}
     # -- Additional annotations for the `tokengen` Job
@@ -748,7 +688,7 @@ kubectlImage:
 
 # -- Section for configuring optional Helm test
 test:
-  enabled: false
+  enabled: true
   # -- Used to directly query the metrics endpoint of the canary for testing, this approach avoids needing prometheus for testing.
   # This in a newer approach to using prometheusAddress such that tests do not have a dependency on prometheus
   canaryServiceAddress: "http://loki-canary:3500/metrics"
@@ -776,7 +716,7 @@ test:
 # The Loki canary pushes logs to and queries from this loki installation to test
 # that it's working correctly
 lokiCanary:
-  enabled: false
+  enabled: true
   # -- If true, the canary will send directly to Loki via the address configured for verification --
   # -- If false, it will write to stdout and an Agent will be needed to scrape and send the logs --
   push: true
@@ -792,8 +732,7 @@ lokiCanary:
     # -- Additional labels for loki-canary Service
     labels: {}
   # -- Additional CLI arguments for the `loki-canary' command
-  extraArgs:
-    - 'config.expand-env=true'
+  extraArgs: []
   # -- Environment variables to add to the canary pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the canary pods
@@ -943,8 +882,7 @@ adminApi:
   #    hostnames:
   #      - domain.tld
   # -- Additional CLI arguments for the `admin-api` target
-  extraArgs:
-    config.expand-env: "true"
+  extraArgs: {}
   # -- Environment variables from secrets or configmaps to add to the admin-api pods
   extraEnvFrom: []
   # -- Additional labels for the `admin-api` Deployment
@@ -963,11 +901,11 @@ adminApi:
     runAsGroup: 10001
     runAsUser: 10001
   containerSecurityContext:
-    readOnlyRootFilesystem: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL
-    allowPrivilegeEscalation: true
+    allowPrivilegeEscalation: false
   # -- Update strategy
   strategy:
     type: RollingUpdate
@@ -1014,7 +952,7 @@ adminApi:
 # Configuration for the gateway
 gateway:
   # -- Specifies whether the gateway should be enabled
-  enabled: false
+  enabled: true
   # -- Number of replicas for the gateway
   replicas: 1
   # -- Default container port
@@ -1070,8 +1008,7 @@ gateway:
   # -- Additional labels for gateway pods
   podLabels: {}
   # -- Additional CLI args for the gateway
-  extraArgs:
-    - 'config.expand-env=true'
+  extraArgs: []
   # -- Environment variables to add to the gateway pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the gateway pods
@@ -1090,7 +1027,7 @@ gateway:
     runAsUser: 101
   # -- The SecurityContext for gateway containers
   containerSecurityContext:
-    readOnlyRootFilesystem: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL
@@ -1229,8 +1166,7 @@ enterpriseGateway:
   #    hostnames:
   #      - domain.tld
   # -- Additional CLI arguments for the `gateway` target
-  extraArgs: 
-    config.expand-env: "true"
+  extraArgs: {}
   # -- Environment variables from secrets or configmaps to add to the enterprise gateway pods
   extraEnvFrom: []
   # -- Additional labels for the `gateway` Pod
@@ -1250,7 +1186,7 @@ enterpriseGateway:
     runAsUser: 10001
     fsGroup: 10001
   containerSecurityContext:
-    readOnlyRootFilesystem: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL
@@ -1270,15 +1206,7 @@ enterpriseGateway:
   # -- Values are defined in small.yaml and large.yaml
   resources: {}
   # -- Configure optional environment variables
-  env: 
-    - name: AWS_ACCESS_KEY_ID
-      value: "minio"
-    - name: AWS_SECRET_ACCESS_KEY
-      value: "minio123"
-    - name: AWS_SDK_LOAD_CONFIG
-      value: "1"
-    - name: AWS_DEBUG
-      value: "1"
+  env: []
   # -- Configure optional initContainers
   initContainers: []
   # -- Conifgure optional extraContainers
@@ -1429,8 +1357,7 @@ singleBinary:
   # -- Comma-separated list of Loki modules to load for the single binary
   targetModule: "all"
   # -- Labels for single binary service
-  extraArgs:
-    - 'config.expand-env=true'
+  extraArgs: []
   # -- Environment variables to add to the single binary pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the single binary pods
@@ -1474,7 +1401,7 @@ singleBinary:
     # If set to "-", storageClassName: "", which disables dynamic provisioning.
     # If empty or set to null, no storageClassName spec is
     # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: openebs-hostpath
+    storageClass: null
     # -- Selector for persistent disk
     selector: null
     # -- Annotations for volume claim
@@ -1541,8 +1468,7 @@ write:
   # -- Comma-separated list of Loki modules to load for the write
   targetModule: "write"
   # -- Additional CLI args for the write
-  extraArgs:
-    - 'config.expand-env=true'
+  extraArgs: []
   # -- Environment variables to add to the write pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the write pods
@@ -1604,7 +1530,7 @@ write:
     # If set to "-", storageClassName: "", which disables dynamic provisioning.
     # If empty or set to null, no storageClassName spec is
     # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: openebs-hostpath
+    storageClass: null
     # -- Selector for persistent disk
     selector: null
     # -- Annotations for volume claim
@@ -1667,8 +1593,7 @@ read:
   # run two targets, false will run 3 targets.
   legacyReadTarget: false
   # -- Additional CLI args for the read
-  extraArgs:
-    - 'config.expand-env=true'
+  extraArgs: []
   # -- Containers to add to the read pods
   extraContainers: []
   # -- Environment variables to add to the read pods
@@ -1715,7 +1640,7 @@ read:
     # If set to "-", storageClassName: "", which disables dynamic provisioning.
     # If empty or set to null, no storageClassName spec is
     # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: openebs-hostpath
+    storageClass: null
     # -- Selector for persistent disk
     selector: null
     # -- Annotations for volume claim
@@ -1774,8 +1699,7 @@ backend:
   # -- Comma-separated list of Loki modules to load for the backend
   targetModule: "backend"
   # -- Additional CLI args for the backend
-  extraArgs:
-    - 'config.expand-env=true'
+  extraArgs: []
   # -- Environment variables to add to the backend pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the backend pods
@@ -1820,7 +1744,7 @@ backend:
     # -- Enable StatefulSetAutoDeletePVC feature
     enableStatefulSetAutoDeletePVC: true
     # -- Size of persistent disk
-    size: 10Gi
+    size: 2Gi
     # -- Storage class to be used.
     # If defined, storageClassName: <storageClass>.
     # If set to "-", storageClassName: "", which disables dynamic provisioning.
@@ -1851,7 +1775,7 @@ ingester:
   #      - domain.tld
   autoscaling:
     # -- Enable autoscaling for the ingester
-    enabled: true
+    enabled: false
     # -- Minimum autoscaling replicas for the ingester
     minReplicas: 1
     # -- Maximum autoscaling replicas for the ingester
@@ -1896,24 +1820,21 @@ ingester:
   # -- Annotations for ingestor service
   serviceAnnotations: {}
   # -- Additional CLI args for the ingester
-  extraArgs:
-    - 'config.expand-env=true'
+  extraArgs: []
   # -- Environment variables to add to the ingester pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the ingester pods
   extraEnvFrom: []
   # -- Volume mounts to add to the ingester pods
-  extraVolumeMounts: []
+  extraVolumeMounts:
+    - name: loki-index
+      mountPath: /loki
   # -- Volumes to add to the ingester pods
-  extraVolumes: []
+  extraVolumes:
+    - name: loki-index
+      emptyDir: {}
   # -- Resource requests and limits for the ingester
-  resources: 
-    requests:
-      cpu: "500m"
-      memory: "512Mi"
-    limits:
-      cpu: "1000m"
-      memory: "1Gi"
+  resources: {}
   # -- Containers to add to the ingester pods
   extraContainers: []
   # -- Init containers to add to the ingester pods
@@ -1968,7 +1889,7 @@ ingester:
     # @notationType -- list
     claims:
       - name: data
-        size: 10Gi
+        size: 2Gi
         #   -- Storage class to be used.
         #   If defined, storageClassName: <storageClass>.
         #   If set to "-", storageClassName: "", which disables dynamic provisioning.
@@ -1994,7 +1915,7 @@ ingester:
   # extremely quickly. Even with zone awareness enabled, it is recommended to run Loki in a single availability zone.
   zoneAwareReplication:
     # -- Enable zone awareness.
-    enabled: true
+    enabled: false
     # -- The percent of replicas in each zone that will be restarted at once. In a value of 0-100
     maxUnavailablePct: 33
     # -- zoneA configuration
@@ -2048,7 +1969,7 @@ distributor:
   #      - domain.tld
   autoscaling:
     # -- Enable autoscaling for the distributor
-    enabled: true
+    enabled: false
     # -- Minimum autoscaling replicas for the distributor
     minReplicas: 1
     # -- Maximum autoscaling replicas for the distributor
@@ -2093,8 +2014,7 @@ distributor:
   # -- Annotations for distributor service
   serviceAnnotations: {}
   # -- Additional CLI args for the distributor
-  extraArgs:
-    - '-config.expand-env=true'
+  extraArgs: []
   # -- Environment variables to add to the distributor pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the distributor pods
@@ -2104,13 +2024,7 @@ distributor:
   # -- Volumes to add to the distributor pods
   extraVolumes: []
   # -- Resource requests and limits for the distributor
-  resources: 
-    requests:
-      cpu: "500m"
-      memory: "512Mi"
-    limits:
-      cpu: "1000m"
-      memory: "1Gi"
+  resources: {}
   # -- Containers to add to the distributor pods
   extraContainers: []
   # -- Grace period to allow the distributor to shutdown before it is killed
@@ -2149,7 +2063,7 @@ querier:
   #      - domain.tld
   autoscaling:
     # -- Enable autoscaling for the querier, this is only used if `indexGateway.enabled: true`
-    enabled: true
+    enabled: false
     # -- Minimum autoscaling replicas for the querier
     minReplicas: 1
     # -- Maximum autoscaling replicas for the querier
@@ -2194,16 +2108,19 @@ querier:
   # -- Annotations for querier service
   serviceAnnotations: {}
   # -- Additional CLI args for the querier
-  extraArgs:
-    - '-config.expand-env=true'
+  extraArgs: []
   # -- Environment variables to add to the querier pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the querier pods
   extraEnvFrom: []
   # -- Volume mounts to add to the querier pods
-  extraVolumeMounts: []
-  # -- Volumes to add to the querier pods
-  extraVolumes: []
+  extraVolumeMounts:
+    - name: loki-index
+      mountPath: /loki
+  # -- Volumes to add to the ingester pods
+  extraVolumes:
+    - name: loki-index
+      emptyDir: {}
   # -- Resource requests and limits for the querier
   resources: {}
   # -- Containers to add to the querier pods
@@ -2244,7 +2161,7 @@ querier:
     # -- Enable creating PVCs for the querier cache
     enabled: true
     # -- Size of persistent disk
-    size: 10Gi
+    size: 1Gi
     # -- Storage class to be used.
     # If defined, storageClassName: <storageClass>.
     # If set to "-", storageClassName: "", which disables dynamic provisioning.
@@ -2268,7 +2185,7 @@ queryFrontend:
   #      - domain.tld
   autoscaling:
     # -- Enable autoscaling for the query-frontend
-    enabled: true
+    enabled: false
     # -- Minimum autoscaling replicas for the query-frontend
     minReplicas: 1
     # -- Maximum autoscaling replicas for the query-frontend
@@ -2313,8 +2230,7 @@ queryFrontend:
   # -- Annotations for query-frontend service
   serviceAnnotations: {}
   # -- Additional CLI args for the query-frontend
-  extraArgs:
-    - 'config.expand-env=true'
+  extraArgs: []
   # -- Environment variables to add to the query-frontend pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the query-frontend pods
@@ -2379,8 +2295,7 @@ queryScheduler:
   # -- Annotations for query-scheduler service
   serviceAnnotations: {}
   # -- Additional CLI args for the query-scheduler
-  extraArgs:
-    - 'config.expand-env=true'
+  extraArgs: []
   # -- Environment variables to add to the query-scheduler pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the query-scheduler pods
@@ -2420,7 +2335,7 @@ indexGateway:
   # -- Number of replicas for the index-gateway
   replicas: 1
   # -- Whether the index gateway should join the memberlist hashring
-  joinMemberlist: true
+  joinMemberlist: false
   # -- hostAliases to add
   hostAliases: []
   #  - ip: 1.2.3.4
@@ -2444,8 +2359,8 @@ indexGateway:
   # -- Annotations for index-gateway service
   serviceAnnotations: {}
   # -- Additional CLI args for the index-gateway
-  extraArgs:
-    - 'config.expand-env=true'  # -- Environment variables to add to the index-gateway pods
+  extraArgs: []
+  # -- Environment variables to add to the index-gateway pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the index-gateway pods
   extraEnvFrom: []
@@ -2480,17 +2395,17 @@ indexGateway:
   tolerations: []
   persistence:
     # -- Enable creating PVCs which is required when using boltdb-shipper
-    enabled: false
+    enabled: true
     # -- Use emptyDir with ramdisk for storage. **Please note that all data in indexGateway will be lost on pod restart**
     inMemory: false
     # -- Size of persistent or memory disk
-    size: 10Gi
+    size: 1Gi
     # -- Storage class to be used.
     # If defined, storageClassName: <storageClass>.
     # If set to "-", storageClassName: "", which disables dynamic provisioning.
     # If empty or set to null, no storageClassName spec is
     # set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-    storageClass: openebs-hostpath
+    storageClass: null
     # -- Annotations for index gateway PVCs
     annotations: {}
     # -- Enable StatefulSetAutoDeletePVC feature
@@ -2545,8 +2460,8 @@ compactor:
   # -- Annotations for compactor service
   serviceAnnotations: {}
   # -- Additional CLI args for the compactor
-  extraArgs:
-    - 'config.expand-env=true'  # -- Environment variables to add to the compactor pods
+  extraArgs: []
+  # -- Environment variables to add to the compactor pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the compactor pods
   extraEnvFrom: []
@@ -2577,7 +2492,7 @@ compactor:
     # -- Enable creating PVCs for the compactor
     enabled: true
     # -- Size of persistent disk
-    size: 10Gi
+    size: 1Gi
     # -- Storage class to be used.
     # If defined, storageClassName: <storageClass>.
     # If set to "-", storageClassName: "", which disables dynamic provisioning.
@@ -2590,7 +2505,7 @@ compactor:
     # @notationType -- list
     claims:
       - name: data
-        size: 10Gi
+        size: 2Gi
         #   -- Storage class to be used.
         #   If defined, storageClassName: <storageClass>.
         #   If set to "-", storageClassName: "", which disables dynamic provisioning.
@@ -2653,8 +2568,8 @@ bloomGateway:
   # -- Annotations for bloom-gateway service
   serviceAnnotations: {}
   # -- Additional CLI args for the bloom-gateway
-  extraArgs:
-    - 'config.expand-env=true'  # -- Environment variables to add to the bloom-gateway pods
+  extraArgs: []
+  # -- Environment variables to add to the bloom-gateway pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the bloom-gateway pods
   extraEnvFrom: []
@@ -2697,7 +2612,7 @@ bloomGateway:
         #   If set to "-", storageClassName: "", which disables dynamic provisioning.
         #   If empty or set to null, no storageClassName spec is
         #   set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-        storageClass: openebs-hostpath
+        storageClass: null
     # -- Enable StatefulSetAutoDeletePVC feature
     enableStatefulSetAutoDeletePVC: false
     whenDeleted: Retain
@@ -2752,8 +2667,8 @@ bloomPlanner:
   # -- Annotations for bloom-planner service
   serviceAnnotations: {}
   # -- Additional CLI args for the bloom-planner
-  extraArgs:
-    - 'config.expand-env=true'  # -- Environment variables to add to the bloom-planner pods
+  extraArgs: []
+  # -- Environment variables to add to the bloom-planner pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the bloom-planner pods
   extraEnvFrom: []
@@ -2796,7 +2711,7 @@ bloomPlanner:
         #   If set to "-", storageClassName: "", which disables dynamic provisioning.
         #   If empty or set to null, no storageClassName spec is
         #   set, choosing the default provisioner (gp2 on AWS, standard on GKE, AWS, and OpenStack).
-        storageClass: openebs-hostpath
+        storageClass: null
     # -- Enable StatefulSetAutoDeletePVC feature
     enableStatefulSetAutoDeletePVC: false
     whenDeleted: Retain
@@ -2869,8 +2784,8 @@ bloomBuilder:
   # -- Annotations for bloom-builder service
   serviceAnnotations: {}
   # -- Additional CLI args for the bloom-builder
-  extraArgs:
-    - 'config.expand-env=true'  # -- Environment variables to add to the bloom-builder pods
+  extraArgs: []
+  # -- Environment variables to add to the bloom-builder pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the bloom-builder pods
   extraEnvFrom: []
@@ -2941,8 +2856,8 @@ patternIngester:
   # -- Annotations for pattern ingester service
   serviceAnnotations: {}
   # -- Additional CLI args for the pattern ingester
-  extraArgs:
-    - 'config.expand-env=true'  # -- Environment variables to add to the pattern ingester pods
+  extraArgs: []
+  # -- Environment variables to add to the pattern ingester pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the pattern ingester pods
   extraEnvFrom: []
@@ -3044,8 +2959,8 @@ ruler:
   # -- Annotations for ruler service
   serviceAnnotations: {}
   # -- Additional CLI args for the ruler
-  extraArgs:
-    - 'config.expand-env=true'  # -- Environment variables to add to the ruler pods
+  extraArgs: []
+  # -- Environment variables to add to the ruler pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the ruler pods
   extraEnvFrom: []
@@ -3082,9 +2997,9 @@ ruler:
   dnsConfig: {}
   persistence:
     # -- Enable creating PVCs which is required when using recording rules
-    enabled: false
+    enabled: true
     # -- Size of persistent disk
-    size: 10Gi
+    size: 2Gi
     # -- Storage class to be used.
     # If defined, storageClassName: <storageClass>.
     # If set to "-", storageClassName: "", which disables dynamic provisioning.
@@ -3194,8 +3109,8 @@ overridesExporter:
   # -- Annotations for overrides-exporter service
   serviceAnnotations: {}
   # -- Additional CLI args for the overrides-exporter
-  extraArgs:
-    - 'config.expand-env=true'  # -- Environment variables to add to the overrides-exporter pods
+  extraArgs: []
+  # -- Environment variables to add to the overrides-exporter pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the overrides-exporter pods
   extraEnvFrom: []
@@ -3250,7 +3165,7 @@ memcached:
   priorityClassName: null
   # -- The SecurityContext for memcached containers
   containerSecurityContext:
-    readOnlyRootFilesystem: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop: [ALL]
     allowPrivilegeEscalation: false
@@ -3266,7 +3181,7 @@ memcachedExporter:
     limits: {}
   # -- The SecurityContext for memcached exporter containers
   containerSecurityContext:
-    readOnlyRootFilesystem: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop: [ALL]
     allowPrivilegeEscalation: false
@@ -3282,7 +3197,7 @@ memcachedExporter:
   extraArgs: {}
 resultsCache:
   # -- Specifies whether memcached based results-cache should be enabled
-  enabled: true
+  enabled: false
   # -- Specify how long cached results should be stored in the results-cache before being expired
   defaultValidity: 12h
   # -- Memcached operation timeout
@@ -3367,9 +3282,9 @@ resultsCache:
   # -- Persistence settings for the results-cache
   persistence:
     # -- Enable creating PVCs for the results-cache
-    enabled: false
+    enabled: true
     # -- Size of persistent disk, must be in G or Gi
-    storageSize: 10G
+    storageSize: 1G
     # -- Storage class to be used.
     # If defined, storageClassName: <storageClass>.
     # If set to "-", storageClassName: "", which disables dynamic provisioning.
@@ -3380,7 +3295,7 @@ resultsCache:
     mountPath: /data
 chunksCache:
   # -- Specifies whether memcached based chunks-cache should be enabled
-  enabled: true
+  enabled: false
   # -- Batchsize for sending and receiving chunks from chunks cache
   batchSize: 4
   # -- Parallel threads for sending and receiving chunks from chunks cache
@@ -3394,7 +3309,7 @@ chunksCache:
   # -- Port of the chunks-cache service
   port: 11211
   # -- Amount of memory allocated to chunks-cache for object storage (in MB).
-  allocatedMemory: 1048
+  allocatedMemory: 8192
   # -- Maximum item memory for chunks-cache (in MB).
   maxItemMemory: 5
   # -- Maximum number of connections allowed
@@ -3469,9 +3384,9 @@ chunksCache:
   # -- Persistence settings for the chunks-cache
   persistence:
     # -- Enable creating PVCs for the chunks-cache
-    enabled: false
+    enabled: true
     # -- Size of persistent disk, must be in G or Gi
-    storageSize: 10G
+    storageSize: 5G
     # -- Storage class to be used.
     # If defined, storageClassName: <storageClass>.
     # If set to "-", storageClassName: "", which disables dynamic provisioning.
@@ -3505,7 +3420,7 @@ rollout_operator:
       type: RuntimeDefault
   # Set the container security context
   securityContext:
-    readOnlyRootFilesystem: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop: [ALL]
     allowPrivilegeEscalation: false
@@ -3513,9 +3428,16 @@ rollout_operator:
 minio:
   enabled: false
   replicas: 1
+  # Minio requires 2 to 16 drives for erasure code (drivesPerNode * replicas)
+  # https://docs.min.io/docs/minio-erasure-code-quickstart-guide
+  # Since we only have 1 replica, that means 2 drives must be used.
   drivesPerNode: 2
+  # root user; not used for GEL authentication
   rootUser: root-user
   rootPassword: supersecretpassword
+  # The first user in the list below is used for Loki/GEL authentication.
+  # You can add additional users if desired; they will not impact Loki/GEL.
+  # `accessKey` = username, `secretKey` = password
   users:
     - accessKey: logs-user
       secretKey: supersecretpassword
@@ -3537,16 +3459,8 @@ minio:
     requests:
       cpu: 100m
       memory: 128Mi
+  # Allow the address used by Loki to refer to Minio to be overridden
   address: null
-
-storage:
-  type: s3
-  s3:
-    s3: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
-    bucketnames: loki
-    region: us-east-1
-    s3forcepathstyle: true
-
 # Create extra manifests via values. Would be passed through `tpl` for templating
 # objects can also be provided as multiline strings, useful for templating field names
 extraObjects: []
@@ -3599,7 +3513,7 @@ sidecar:
   #     memory: 50Mi
   # -- The SecurityContext for the sidecar.
   securityContext:
-    readOnlyRootFilesystem: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL
@@ -3820,8 +3734,8 @@ tableManager:
     # -- Additional labels for table-manager Service
     labels: {}
   # -- Additional CLI args for the table-manager
-  extraArgs:
-    - 'config.expand-env=true'  # -- Environment variables to add to the table-manager pods
+  extraArgs: []
+  # -- Environment variables to add to the table-manager pods
   extraEnv: []
   # -- Environment variables from secrets or configmaps to add to the table-manager pods
   extraEnvFrom: []
@@ -3854,4 +3768,3 @@ tableManager:
   retention_deletes_enabled: false
   # -- Set retention period
   retention_period: 0
-
