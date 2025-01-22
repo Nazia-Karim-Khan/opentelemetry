@@ -461,6 +461,12 @@ loki:
         bucketnames: loki
         endpoint: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
         region: us-west-2
+        insecure: true
+        s3forcepathstyle: true
+      index_gateway_client:
+      # only applicable if using microservices where index-gateways are independently deployed.
+      # This example is using kubernetes-style naming.
+        server_address: dns:///loki-index-gateway.loki.svc.cluster.local:9095
     # s3:
     #   # access_key: "minio"  # MINIO_ROOT_USER
     #   # secret_key: "minio123"  # MINIO_ROOT_PASSWORD
@@ -3521,13 +3527,13 @@ minio:
       secretKey: supersecretpassword
       policy: readwrite
   buckets:
-    - name: chunks
+    - name: loki
       policy: none
       purge: false
-    - name: ruler
+    - name: test
       policy: none
       purge: false
-    - name: admin
+    - name: test
       policy: none
       purge: false
   persistence:
@@ -3537,15 +3543,15 @@ minio:
     requests:
       cpu: 100m
       memory: 128Mi
-  address: null
+  address: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
 
-storage:
-  type: s3
-  s3:
-    s3: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
-    bucketnames: loki
-    region: us-east-1
-    s3forcepathstyle: true
+# storage:
+#   type: s3
+#   s3:
+#     s3: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
+#     bucketnames: loki
+#     region: us-west-2
+#     s3forcepathstyle: true
 
 # Create extra manifests via values. Would be passed through `tpl` for templating
 # objects can also be provided as multiline strings, useful for templating field names
@@ -3822,7 +3828,16 @@ tableManager:
   # -- Additional CLI args for the table-manager
   extraArgs:
     - 'config.expand-env=true'  # -- Environment variables to add to the table-manager pods
-  extraEnv: []
+  extraEnv: 
+    - name: AWS_ACCESS_KEY_ID
+      value: "minio"
+    - name: AWS_SECRET_ACCESS_KEY
+      value: "minio123"
+    - name: AWS_SDK_LOAD_CONFIG
+      value: "1"
+    - name: AWS_DEBUG
+      value: "1"
+
   # -- Environment variables from secrets or configmaps to add to the table-manager pods
   extraEnvFrom: []
   # -- Volume mounts to add to the table-manager pods
