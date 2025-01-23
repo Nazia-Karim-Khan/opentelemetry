@@ -480,7 +480,7 @@ loki:
   # # -- a real Loki install requires a proper schemaConfig defined above this, however for testing or playing around
   # # you can enable useTestSchema
   compactor:
-    working_directory: /var/loki/retention
+    working_directory: /var/loki/data/compactor
     compaction_interval: 10m
     retention_enabled: true
     retention_delete_delay: 2h
