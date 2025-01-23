@@ -432,20 +432,21 @@ loki:
   # -- Check https://grafana.com/docs/loki/latest/configuration/#schema_config for more info on how to configure schemas
   schemaConfig: 
     configs:
-      - from: 2025-01-19
+      - from: "2020-09-07"
+        store: boltdb-shipper 
+        object_store: s3 
+        schema: v13 
+        index:
+          prefix: loki_index_
+          period: 24h
+      - from: 2025-01-01
         store: tsdb
         object_store: aws
         schema: v13
         index:
-          prefix: index_
+          prefix: loki_index_
           period: 24h
-      # - from: "2025-01-19" 
-      #   store: boltdb-shipper 
-      #   object_store: s3 
-      #   schema: v13 
-      #   index:
-      #     prefix: loki_index
-      #     period: 24h
+
 
   # -- Check https://grafana.com/docs/loki/latest/configuration/#storage_config for more info on how to configure storages
   storageConfig:
@@ -1905,7 +1906,15 @@ ingester:
   extraArgs:
     - 'config.expand-env=true'
   # -- Environment variables to add to the ingester pods
-  extraEnv: []
+  extraEnv: 
+    - name: AWS_ACCESS_KEY_ID
+      value: "minio"
+    - name: AWS_SECRET_ACCESS_KEY
+      value: "minio123"
+    - name: AWS_SDK_LOAD_CONFIG
+      value: "1"
+    - name: AWS_DEBUG
+      value: "1"
   # -- Environment variables from secrets or configmaps to add to the ingester pods
   extraEnvFrom: []
   # -- Volume mounts to add to the ingester pods
@@ -2553,7 +2562,15 @@ compactor:
   # -- Additional CLI args for the compactor
   extraArgs:
     - 'config.expand-env=true'  # -- Environment variables to add to the compactor pods
-  extraEnv: []
+  extraEnv: 
+  - name: AWS_ACCESS_KEY_ID
+    value: "minio"
+  - name: AWS_SECRET_ACCESS_KEY
+    value: "minio123"
+  - name: AWS_SDK_LOAD_CONFIG
+    value: "1"
+  - name: AWS_DEBUG
+    value: "1"
   # -- Environment variables from secrets or configmaps to add to the compactor pods
   extraEnvFrom: []
   # -- Volume mounts to add to the compactor pods
@@ -3052,7 +3069,15 @@ ruler:
   # -- Additional CLI args for the ruler
   extraArgs:
     - 'config.expand-env=true'  # -- Environment variables to add to the ruler pods
-  extraEnv: []
+  extraEnv: 
+    - name: AWS_ACCESS_KEY_ID
+      value: "minio"
+    - name: AWS_SECRET_ACCESS_KEY
+      value: "minio123"
+    - name: AWS_SDK_LOAD_CONFIG
+      value: "1"
+    - name: AWS_DEBUG
+      value: "1"
   # -- Environment variables from secrets or configmaps to add to the ruler pods
   extraEnvFrom: []
   # -- Volume mounts to add to the ruler pods
