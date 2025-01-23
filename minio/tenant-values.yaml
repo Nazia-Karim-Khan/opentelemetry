@@ -255,6 +255,8 @@ tenant:
     - name: tempo
     - name: file-server
     - name: test
+    - name: ruler
+    - name: admin
   ###
   # Array of Kubernetes secrets from which the Operator generates MinIO users during tenant provisioning.
   #

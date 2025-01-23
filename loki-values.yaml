@@ -343,7 +343,7 @@ loki:
     query_timeout: 300s
     volume_enabled: true
     retention_period: 168h
-    allow_structured_metadata: false
+    allow_structured_metadata: true
   # -- Provides a reloadable runtime configuration file for some specific configuration
   runtimeConfig: {}
   # -- Check https://grafana.com/docs/loki/latest/configuration/#common_config for more info on how to provide a common configuration
@@ -352,7 +352,6 @@ loki:
     replication_factor: 3
     compactor_address: '{{ include "loki.compactorAddress" . }}'
   # -- Storage config. Providing this will automatically populate all necessary storage configs in the templated config.
-    replication_factor: 3
     ring:
       kvstore:
         store: memberlist
@@ -360,15 +359,16 @@ loki:
     # Loki requires a bucket for chunks and the ruler. GEL requires a third bucket for the admin API.
     # Please provide these values if you are using object storage.
     bucketNames: 
-      chunks: loki # Provide the name for the chunks bucket
-      ruler: test    # Provide the name for the ruler bucket
-      admin: test
+      chunks: loki
+      ruler: ruler
+      admin: admin
     type: s3
     s3:
-      access_key: minio # MINIO_ROOT_USER
-      secret_key: minio123  # MINIO_ROOT_PASSWORD
-      bucket: loki
-      endpoint: minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
+      s3: http://minioaccesskey:miniosecretkey@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
+      endpoint: http://minioaccesskey:miniosecretkey@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
+      region: us-east-1
+      secretAccessKey: minio123
+      accessKeyId: minio
       signatureVersion: null
       s3ForcePathStyle: true
       insecure: true
@@ -376,44 +376,6 @@ loki:
       # -- Check https://grafana.com/docs/loki/latest/configure/#s3_storage_config for more info on how to provide a backoff_config
       backoff_config: {}
       disable_dualstack: false
-    gcs:
-      chunkBufferSize: 0
-      requestTimeout: "0s"
-      enableHttp2: true
-    azure:
-      accountName: null
-      accountKey: null
-      connectionString: null
-      useManagedIdentity: false
-      useFederatedToken: false
-      userAssignedId: null
-      requestTimeout: null
-      endpointSuffix: null
-      chunkDelimiter: null
-    swift:
-      auth_version: null
-      auth_url: null
-      internal: null
-      username: null
-      user_domain_name: null
-      user_domain_id: null
-      user_id: null
-      password: null
-      domain_id: null
-      domain_name: null
-      project_id: null
-      project_name: null
-      project_domain_id: null
-      project_domain_name: null
-      region_name: null
-      container_name: null
-      max_retries: null
-      connect_timeout: null
-      request_timeout: null
-    filesystem:
-      chunks_directory: /var/loki/chunks
-      rules_directory: /var/loki/rules
-      admin_api_directory: /var/loki/admin
   # -- Configure memcached as an external cache for chunk and results cache. Disabled by default
   # must enable and specify a host for each cache you would like to use.
   memcached:
@@ -432,14 +394,7 @@ loki:
   # -- Check https://grafana.com/docs/loki/latest/configuration/#schema_config for more info on how to configure schemas
   schemaConfig: 
     configs:
-      - from: "2020-09-07"
-        store: boltdb-shipper 
-        object_store: s3 
-        schema: v13 
-        index:
-          prefix: loki_index_
-          period: 24h
-      - from: 2025-01-01
+      - from: 2020-07-01
         store: tsdb
         object_store: aws
         schema: v13
@@ -450,32 +405,18 @@ loki:
 
   # -- Check https://grafana.com/docs/loki/latest/configuration/#storage_config for more info on how to configure storages
   storageConfig:
-    # boltdb_shipper:
-    #   active_index_directory: /var/loki/index
-    #   cache_location: /var/loki/cache
-    #   cache_ttl: 24h
-    #   shared_store: s3
     tsdb_shipper:
       active_index_directory: /var/loki/index
       cache_location: /var/loki/index_cache
-      aws:
-        bucketnames: loki
-        endpoint: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
-        region: us-west-2
-        insecure: true
-        s3forcepathstyle: true
+      cache_ttl: 24h
       index_gateway_client:
-      # only applicable if using microservices where index-gateways are independently deployed.
-      # This example is using kubernetes-style naming.
         server_address: dns:///loki-index-gateway.loki.svc.cluster.local:9095
-    # s3:
-    #   # access_key: "minio"  # MINIO_ROOT_USER
-    #   # secret_key: "minio123"  # MINIO_ROOT_PASSWORD
-    #   bucket: "loki"
-    #   s3: "http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000"
-    #   insecure: true
-    #   s3forcepathstyle: false
-
+    aws:
+      bucketnames: loki
+      s3: http://minioaccesskey:miniosecretkey@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
+      region: us-east-1
+      insecure: true
+      s3forcepathstyle: true
 
   # # -- a real Loki install requires a proper schemaConfig defined above this, however for testing or playing around
   # # you can enable useTestSchema
@@ -485,23 +426,7 @@ loki:
     retention_enabled: true
     retention_delete_delay: 2h
     retention_delete_worker_count: 150
-    delete_request_store: aws   
-    # shared_store: s3
-  #   boltdb_shipper:
-  #     directory: /tmp/loki/index
-  #     cache_ttl: 250h
-  # #   retention_enabled: true
-  # #   delete_request_store:
-  #   tsdb_shipper:
-  #     active_index_directory: /data/tsdb-index
-  #     cache_location: /data/tsdb-cache
-  #   aws:
-  #     # access_key: "minio"  # MINIO_ROOT_USER
-  #     # secret_key: "minio123"  # MINIO_ROOT_PASSWORD
-  #     bucket: "loki"
-  #     s3: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
-  #     insecure: true
-  #     s3forcepathstyle: false
+    delete_request_store: aws
 
   useTestSchema: false
   testSchemaConfig:
@@ -539,13 +464,6 @@ loki:
       at: "250ms"
       max_per_second: 20
       up_to: 3
-  # --  Optional compactor configuration
-  compactor: 
-    working_directory: /var/loki/data/compactor
-    compaction_interval: 5m
-    # retention_enabled: true
-    retention_delete_delay: 2h
-    retention_delete_worker_count: 150
   # --  Optional pattern ingester configuration
   pattern_ingester:
     enabled: false
@@ -2009,7 +1927,7 @@ ingester:
   # extremely quickly. Even with zone awareness enabled, it is recommended to run Loki in a single availability zone.
   zoneAwareReplication:
     # -- Enable zone awareness.
-    enabled: true
+    enabled: false
     # -- The percent of replicas in each zone that will be restarted at once. In a value of 0-100
     maxUnavailablePct: 33
     # -- zoneA configuration
@@ -3568,14 +3486,14 @@ minio:
     requests:
       cpu: 100m
       memory: 128Mi
-  address: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
+  address: http://minioaccesskey:miniosecretkey@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
 
 # storage:
 #   type: s3
 #   s3:
-#     s3: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
+#     s3: http://minioaccesskey:miniosecretkey@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
 #     bucketnames: loki
-#     region: us-west-2
+#     region: us-east-1
 #     s3forcepathstyle: true
 
 # Create extra manifests via values. Would be passed through `tpl` for templating
@@ -3894,4 +3812,3 @@ tableManager:
   retention_deletes_enabled: false
   # -- Set retention period
   retention_period: 0
-
