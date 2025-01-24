@@ -3811,7 +3811,7 @@ metaMonitoring:
       # configuration to write logs to this Loki-compatible remote. Optional.
       remote:
         # -- Full URL for Loki push endpoint. Usually ends in /loki/api/v1/push
-        url: ""
+        url: "http://mimir-distributor.mimir-test.svc.cluster.local:8080/api/v1/push"
 
         auth:
           # -- Used to set X-Scope-OrgID header on requests. Usually not used in combination with username and password.
