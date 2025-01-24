@@ -29,7 +29,7 @@ Install distributed-loki:
 kubectl create namespace loki
 helm pull grafana/loki-distributed --version 0.79.0
 helm install loki-distributed  loki/loki-distributed-0.79.0.tgz -n loki -f loki/values.yaml
-helm install loki grafana/loki -f loki-values.yaml -n loki
+helm install loki grafana/loki -f loki/loki-values.yaml -n loki
 
 Install tempo:
 kubectl create namespace tempo

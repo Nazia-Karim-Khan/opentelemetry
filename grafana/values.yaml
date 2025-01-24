@@ -669,7 +669,7 @@ datasources:
      isDefault: false
    - name: Loki
      type: loki
-     url: http://loki-distributed-query-frontend.loki.svc.cluster.local:3100
+     url: http://loki-query-frontend.loki.svc.cluster.local:3100/
      access: proxy
      isDefault: false
 #    - name: CloudWatch

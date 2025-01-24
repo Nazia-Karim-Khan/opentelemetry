@@ -42,8 +42,7 @@ kubectl port-forward svc/grafana -n grafana 5000:80
 
 ```bash
 kubectl create namespace loki
-helm show values grafana/loki-distributed > values.yaml
-helm install loki grafana/loki-distributed -f loki/values.yaml --namespace loki
+helm install loki grafana/loki -f loki/loki-values.yaml -n loki
 ```
 
 ### Step 6: Install Tempo
@@ -102,6 +101,7 @@ kubectl apply -f otel-collector.yaml -n opentelemetry
 ## References
 
 - [Grafana Helm Charts](https://github.com/grafana/helm-charts/tree/main/charts)
+- [Updated Loki values](https://github.com/grafana/loki/blob/main/production/helm/loki/values.yaml)
 - [Mimir Documentation](https://grafana.com/docs/helm-charts/mimir-distributed/latest/get-started-helm-charts/)
 - [OpenTelemetry Helm Charts](https://github.com/open-telemetry/opentelemetry-helm-charts?tab=readme-ov-file)
 - [OpenTelemetry Collector](https://grafana.com/docs/mimir/latest/configure/configure-otel-collector/)

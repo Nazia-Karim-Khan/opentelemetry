@@ -574,9 +574,9 @@ enterprise:
     # -- Additional Kubernetes environment
     env:
       - name: AWS_ACCESS_KEY_ID
-        value: "minio"
+        value: "minioaccesskey"
       - name: AWS_SECRET_ACCESS_KEY
-        value: "minio123"
+        value: "miniosecretkey"
       - name: AWS_SDK_LOAD_CONFIG
         value: "1"
       - name: AWS_DEBUG
@@ -861,7 +861,7 @@ memberlist:
 # -- Configuration for the `admin-api` target
 adminApi:
   # -- Define the amount of instances
-  replicas: 1
+  replicas: 3
   # -- hostAliases to add
   hostAliases: []
   #  - ip: 1.2.3.4
@@ -941,7 +941,7 @@ gateway:
   # -- Specifies whether the gateway should be enabled
   enabled: false
   # -- Number of replicas for the gateway
-  replicas: 1
+  replicas: 3
   # -- Default container port
   containerPort: 8080
   # -- Enable logging of 2xx and 3xx HTTP requests
@@ -1147,7 +1147,7 @@ gateway:
 # -- If running enterprise and using the default enterprise gateway, configs go here.
 enterpriseGateway:
   # -- Define the amount of instances
-  replicas: 1
+  replicas: 3
   # -- hostAliases to add
   hostAliases: []
   #  - ip: 1.2.3.4
@@ -1197,9 +1197,9 @@ enterpriseGateway:
   # -- Configure optional environment variables
   env: 
     - name: AWS_ACCESS_KEY_ID
-      value: "minio"
+      value: "minioaccesskey"
     - name: AWS_SECRET_ACCESS_KEY
-      value: "minio123"
+      value: "miniosecretkey"
     - name: AWS_SDK_LOAD_CONFIG
       value: "1"
     - name: AWS_DEBUG
@@ -1768,7 +1768,7 @@ backend:
 ingester:
   # -- Number of replicas for the ingester, when zoneAwareReplication.enabled is true, the total
   # number of replicas will match this value with each zone having 1/3rd of the total replicas.
-  replicas: 1
+  replicas: 3
   # -- hostAliases to add
   hostAliases: []
   #  - ip: 1.2.3.4
@@ -1778,7 +1778,7 @@ ingester:
     # -- Enable autoscaling for the ingester
     enabled: true
     # -- Minimum autoscaling replicas for the ingester
-    minReplicas: 1
+    minReplicas: 2
     # -- Maximum autoscaling replicas for the ingester
     maxReplicas: 3
     # -- Target CPU utilisation percentage for the ingester
@@ -1826,9 +1826,9 @@ ingester:
   # -- Environment variables to add to the ingester pods
   extraEnv: 
     - name: AWS_ACCESS_KEY_ID
-      value: "minio"
+      value: "minioaccesskey"
     - name: AWS_SECRET_ACCESS_KEY
-      value: "minio123"
+      value: "miniosecretkey"
     - name: AWS_SDK_LOAD_CONFIG
       value: "1"
     - name: AWS_DEBUG
@@ -1973,7 +1973,7 @@ ingester:
 # --  Configuration for the distributor
 distributor:
   # -- Number of replicas for the distributor
-  replicas: 1
+  replicas: 3
   # -- hostAliases to add
   hostAliases: []
   #  - ip: 1.2.3.4
@@ -1983,7 +1983,7 @@ distributor:
     # -- Enable autoscaling for the distributor
     enabled: true
     # -- Minimum autoscaling replicas for the distributor
-    minReplicas: 1
+    minReplicas: 2
     # -- Maximum autoscaling replicas for the distributor
     maxReplicas: 3
     # -- Target CPU utilisation percentage for the distributor
@@ -2058,7 +2058,7 @@ distributor:
               app.kubernetes.io/component: distributor
           topologyKey: kubernetes.io/hostname
   # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
+  maxUnavailable: 1
   # -- Max Surge for distributor pods
   maxSurge: 0
   # -- Node selector for distributor pods
@@ -2074,7 +2074,7 @@ distributor:
 # --  Configuration for the querier
 querier:
   # -- Number of replicas for the querier
-  replicas: 1
+  replicas: 3
   # -- hostAliases to add
   hostAliases: []
   #  - ip: 1.2.3.4
@@ -2084,7 +2084,7 @@ querier:
     # -- Enable autoscaling for the querier, this is only used if `indexGateway.enabled: true`
     enabled: true
     # -- Minimum autoscaling replicas for the querier
-    minReplicas: 1
+    minReplicas: 2
     # -- Maximum autoscaling replicas for the querier
     maxReplicas: 3
     # -- Target CPU utilisation percentage for the querier
@@ -2164,7 +2164,7 @@ querier:
               app.kubernetes.io/component: querier
           topologyKey: kubernetes.io/hostname
   # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
+  maxUnavailable: 1
   # -- Max Surge for querier pods
   maxSurge: 0
   # -- Node selector for querier pods
@@ -2193,7 +2193,7 @@ querier:
 # -- Configuration for the query-frontend
 queryFrontend:
   # -- Number of replicas for the query-frontend
-  replicas: 1
+  replicas: 3
   # -- hostAliases to add
   hostAliases: []
   #  - ip: 1.2.3.4
@@ -2203,7 +2203,7 @@ queryFrontend:
     # -- Enable autoscaling for the query-frontend
     enabled: true
     # -- Minimum autoscaling replicas for the query-frontend
-    minReplicas: 1
+    minReplicas: 2
     # -- Maximum autoscaling replicas for the query-frontend
     maxReplicas: 3
     # -- Target CPU utilisation percentage for the query-frontend
@@ -2272,7 +2272,7 @@ queryFrontend:
               app.kubernetes.io/component: query-frontend
           topologyKey: kubernetes.io/hostname
   # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
+  maxUnavailable: 1
   # -- Node selector for query-frontend pods
   nodeSelector: {}
   # -- Topology Spread Constraints for query-frontend pods
@@ -2288,7 +2288,7 @@ queryScheduler:
   # -- Number of replicas for the query-scheduler.
   # It should be lower than `-querier.max-concurrent` to avoid generating back-pressure in queriers;
   # it's also recommended that this value evenly divides the latter
-  replicas: 1
+  replicas: 3
   # -- hostAliases to add
   hostAliases: []
   #  - ip: 1.2.3.4
@@ -2351,7 +2351,7 @@ queryScheduler:
 # -- Configuration for the index-gateway
 indexGateway:
   # -- Number of replicas for the index-gateway
-  replicas: 1
+  replicas: 3
   # -- Whether the index gateway should join the memberlist hashring
   joinMemberlist: true
   # -- hostAliases to add
@@ -2404,7 +2404,7 @@ indexGateway:
               app.kubernetes.io/component: index-gateway
           topologyKey: kubernetes.io/hostname
   # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
+  maxUnavailable: 1
   # -- Node selector for index-gateway pods
   nodeSelector: {}
   # -- Topology Spread Constraints for index-gateway pods
@@ -2443,7 +2443,7 @@ indexGateway:
 # -- Configuration for the compactor
 compactor:
   # -- Number of replicas for the compactor
-  replicas: 1
+  replicas: 3
   # -- hostAliases to add
   hostAliases: []
   #  - ip: 1.2.3.4
@@ -2482,9 +2482,9 @@ compactor:
     - 'config.expand-env=true'  # -- Environment variables to add to the compactor pods
   extraEnv: 
   - name: AWS_ACCESS_KEY_ID
-    value: "minio"
+    value: "minioaccesskey"
   - name: AWS_SECRET_ACCESS_KEY
-    value: "minio123"
+    value: "miniosecretkey"
   - name: AWS_SDK_LOAD_CONFIG
     value: "1"
   - name: AWS_DEBUG
@@ -2959,7 +2959,7 @@ ruler:
   # -- The ruler component is optional and can be disabled if desired.
   enabled: true
   # -- Number of replicas for the ruler
-  replicas: 1
+  replicas: 3
   # -- hostAliases to add
   hostAliases: []
   #  - ip: 1.2.3.4
@@ -2989,9 +2989,9 @@ ruler:
     - 'config.expand-env=true'  # -- Environment variables to add to the ruler pods
   extraEnv: 
     - name: AWS_ACCESS_KEY_ID
-      value: "minio"
+      value: "minioaccesskey"
     - name: AWS_SECRET_ACCESS_KEY
-      value: "minio123"
+      value: "miniosecretkey"
     - name: AWS_SDK_LOAD_CONFIG
       value: "1"
     - name: AWS_DEBUG
@@ -3020,7 +3020,7 @@ ruler:
               app.kubernetes.io/component: ruler
           topologyKey: kubernetes.io/hostname
   # -- Pod Disruption Budget maxUnavailable
-  maxUnavailable: null
+  maxUnavailable: 1
   # -- Node selector for ruler pods
   nodeSelector: {}
   # -- Topology Spread Constraints for ruler pods
@@ -3237,7 +3237,7 @@ resultsCache:
   # -- Memcached operation timeout
   timeout: 500ms
   # -- Total number of results-cache replicas
-  replicas: 1
+  replicas: 3
   # -- Port of the results-cache service
   port: 11211
   # -- Amount of memory allocated to results-cache for object storage (in MB).
@@ -3339,7 +3339,7 @@ chunksCache:
   # -- Specify how long cached chunks should be stored in the chunks-cache before being expired
   defaultValidity: 0s
   # -- Total number of chunks-cache replicas
-  replicas: 1
+  replicas: 3
   # -- Port of the chunks-cache service
   port: 11211
   # -- Amount of memory allocated to chunks-cache for object storage (in MB).
@@ -3773,9 +3773,9 @@ tableManager:
     - 'config.expand-env=true'  # -- Environment variables to add to the table-manager pods
   extraEnv: 
     - name: AWS_ACCESS_KEY_ID
-      value: "minio"
+      value: "minioaccesskey"
     - name: AWS_SECRET_ACCESS_KEY
-      value: "minio123"
+      value: "miniosecretkey"
     - name: AWS_SDK_LOAD_CONFIG
       value: "1"
     - name: AWS_DEBUG
