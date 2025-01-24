@@ -257,6 +257,9 @@ tenant:
     - name: test
     - name: ruler
     - name: admin
+    - name: mimir-blocks
+    - name: mimir-alertmanager
+    - name: mimir-ruler
   ###
   # Array of Kubernetes secrets from which the Operator generates MinIO users during tenant provisioning.
   #

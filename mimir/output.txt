@@ -1,5 +1,8 @@
+WARNING: Kubernetes configuration file is group-readable. This is insecure. Location: ./k0s/kubeconfig.yaml
+WARNING: Kubernetes configuration file is world-readable. This is insecure. Location: ./k0s/kubeconfig.yaml
+W0124 23:29:06.788597    6318 warnings.go:70] metadata.name: this is used in Pod names and hostnames, which can result in surprising behavior; a DNS label is recommended: [must not contain dots]
 NAME: mimir
-LAST DEPLOYED: Thu Jan  2 17:03:24 2025
+LAST DEPLOYED: Fri Jan 24 23:29:04 2025
 NAMESPACE: mimir-test
 STATUS: deployed
 REVISION: 1
