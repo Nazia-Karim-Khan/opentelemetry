@@ -367,8 +367,8 @@ loki:
       s3: http://minioaccesskey:miniosecretkey@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
       endpoint: http://minioaccesskey:miniosecretkey@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
       region: us-east-1
-      secretAccessKey: minio123
-      accessKeyId: minio
+      secretAccessKey: miniosecretkey
+      accessKeyId: minioaccesskey
       signatureVersion: null
       s3ForcePathStyle: true
       insecure: true

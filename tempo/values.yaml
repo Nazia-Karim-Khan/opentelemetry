@@ -856,7 +856,7 @@ queryFrontend:
     # -- Extra volumes for tempo-query deployment
     extraVolumes: []
     config: |
-      backend: http://minio:minio123@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
+      backend: http://minioaccesskey:miniosecretkey@minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000
   # -- Number of replicas for the query-frontend
   replicas: 1
   # -- hostAliases to add
@@ -1557,8 +1557,8 @@ storage:
     # -- The supported storage backends are gcs, s3 and azure, as specified in https://grafana.com/docs/tempo/latest/configuration/#storage
     backend: s3
     s3:
-      access_key: "minio"  # MINIO_ROOT_USER
-      secret_key: "minio123"  # MINIO_ROOT_PASSWORD
+      access_key: "minioaccesskey"  # MINIO_ROOT_USER
+      secret_key: "miniosecretkey"  # MINIO_ROOT_PASSWORD
       bucket: "tempo"
       endpoint: "minio-tenant-logs-hl.minio-tenant.svc.cluster.local:9000"
       insecure: true

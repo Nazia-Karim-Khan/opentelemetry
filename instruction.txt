@@ -39,6 +39,7 @@ Install mimir:
 kubectl create namespace mimir-test
 helm show values grafana/mimir-distributed > mimir/values.yaml
 helm install mimir grafana/mimir-distributed -f mimir/values.yaml --namespace mimir-test
+kubectl port-forward -n minio-tenant svc/minio-tenant-logs-console 9090:9090
 
 Install prometheus:
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
