@@ -1,0 +1,5 @@
+kubectl create secret docker-registry kpack-registry-credentials \
+    --docker-username=nazia141 \
+    --docker-password=Oishee2002 \
+    --docker-server=https://index.docker.io/v1/ \
+    --namespace kpack

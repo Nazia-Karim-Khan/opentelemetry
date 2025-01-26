@@ -1,0 +1,21 @@
+apiVersion: kpack.io/v1alpha2
+kind: Image
+metadata:
+  name: spring-app-image
+  namespace: kpack
+spec:
+  tag: nazia141/kpack-spring-boot-app:1.0
+  serviceAccountName: default-service-account
+  builder:
+    name: otel-builder
+    kind: ClusterBuilder
+  source:
+    git:
+      url: https://github.com/Nazia-Karim-Khan/kpack-spring-app
+      revision: main
+  build:
+    env:
+      - name: BP_OPENTELEMETRY_ENABLED
+        value: "true"   
+      - name: BP_JVM_VERSION
+        value: "17"   
