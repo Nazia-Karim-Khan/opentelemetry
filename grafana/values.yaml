@@ -657,11 +657,11 @@ datasources:
  datasources.yaml:
    apiVersion: 1
    datasources:
-   - name: Prometheus
-     type: prometheus
-     url: http://prometheus-server.prometheus.svc.cluster.local:80
-     access: proxy
-     isDefault: true
+  #  - name: Prometheus
+  #    type: prometheus
+  #    url: http://prometheus-server.prometheus.svc.cluster.local:80
+  #    access: proxy
+  #    isDefault: true
    - name: Tempo
      type: tempo
      url: http://tempo-query-frontend.tempo.svc.cluster.local:3100
@@ -670,6 +670,11 @@ datasources:
    - name: Loki
      type: loki
      url: http://loki-query-frontend.loki.svc.cluster.local:3100/
+     access: proxy
+     isDefault: false
+   - name: Prometheus
+     type: prometheus
+     url: http://mimir-nginx.mimir-test.svc:80/prometheus
      access: proxy
      isDefault: false
 #    - name: CloudWatch

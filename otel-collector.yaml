@@ -14,8 +14,8 @@ spec:
             endpoint: 0.0.0.0:4318
 
     exporters:
-      prometheusremotewrite:
-        endpoint: http://mimir-nginx.mimir-test.svc:80/api/v1/push
+      otlphttp:
+        endpoint: http://mimir-nginx.mimir-test.svc:80/otlp
         tls:
           insecure: true
       otlphttp/logs:
@@ -34,7 +34,7 @@ spec:
           exporters: [otlp]
         metrics:
           receivers: [otlp]
-          exporters: [prometheusremotewrite]
+          exporters: [otlphttp]
         logs:
           receivers: [otlp]
           exporters: [otlphttp/logs]

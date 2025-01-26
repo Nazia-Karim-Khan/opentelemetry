@@ -279,11 +279,11 @@ server:
   ##
   remoteWrite: 
     # - url: "http://mimir-distributor.mimir-test.svc.cluster.local:8080/api/v1/push"
-    - url: "http://grafana.grafana.svc.cluster.local"  
+    # - url: "http://grafana.grafana.svc.cluster.local"  
   ## https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_read
   ##
   remoteRead: 
-    - url: "http://opentelemetry-collector-collector.opentelemetry.svc.cluster.local:4318"
+    # - url: "http://opentelemetry-collector-collector.opentelemetry.svc.cluster.local:4318"
 
   ## https://prometheus.io/docs/prometheus/latest/configuration/configuration/#tsdb
   ##
