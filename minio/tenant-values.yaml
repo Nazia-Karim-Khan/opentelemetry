@@ -452,7 +452,7 @@ ingress:
     pathType: Prefix
   console:
     enabled: false
-    ingressClassName: ""
+    ingressClassName: "nginx"
     labels: { }
     annotations: { }
     tls: [ ]

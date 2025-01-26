@@ -15,7 +15,7 @@ spec:
 
     exporters:
       prometheusremotewrite:
-        endpoint: http://prometheus-server.prometheus.svc.cluster.local/api/v1/write
+        endpoint: http://mimir-nginx.mimir-test.svc:80/api/v1/push
         tls:
           insecure: true
       otlphttp/logs:

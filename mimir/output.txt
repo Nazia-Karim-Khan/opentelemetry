@@ -1,8 +1,7 @@
 WARNING: Kubernetes configuration file is group-readable. This is insecure. Location: ./k0s/kubeconfig.yaml
 WARNING: Kubernetes configuration file is world-readable. This is insecure. Location: ./k0s/kubeconfig.yaml
-W0124 23:29:06.788597    6318 warnings.go:70] metadata.name: this is used in Pod names and hostnames, which can result in surprising behavior; a DNS label is recommended: [must not contain dots]
 NAME: mimir
-LAST DEPLOYED: Fri Jan 24 23:29:04 2025
+LAST DEPLOYED: Sun Jan 26 09:56:41 2025
 NAMESPACE: mimir-test
 STATUS: deployed
 REVISION: 1
@@ -19,3 +18,7 @@ From inside the cluster:
   http://mimir-nginx.mimir-test.svc:80/prometheus
 
 **IMPORTANT**: Always consult CHANGELOG.md file at https://github.com/grafana/mimir/blob/main/operations/helm/charts/mimir-distributed/CHANGELOG.md and the deprecation list there to learn about breaking changes that require action during upgrade.
+
+
+
+

@@ -34,7 +34,8 @@ image:
   # -- Grafana Mimir container image repository. Note: for Grafana Enterprise Metrics use the value 'enterprise.image.repository'
   repository: grafana/mimir
   # -- Grafana Mimir container image tag. Note: for Grafana Enterprise Metrics use the value 'enterprise.image.tag'
-  tag: 2.15.0
+  # tag: 2.15.0
+  tag: r326-49bc44d
   # -- Container pull policy - shared between Grafana Mimir and Grafana Enterprise Metrics
   pullPolicy: IfNotPresent
   # -- Optionally specify an array of imagePullSecrets - shared between Grafana Mimir and Grafana Enterprise Metrics
@@ -116,6 +117,16 @@ vaultAgent:
   caCertPath: ""
 
 mimir:
+
+  # ruler:
+  #   enabled: true
+  #   address: "http://mimir-ruler.mimir-test.svc.cluster.local:8080"
+  # rules:
+  #   kubernetes:
+  #     "LABEL": 
+  #       address: "MIMIR_RULER_URL"
+  #       tenant_id: "anonymous"
+
   # -- Base config file for Grafana Mimir and Grafana Enterprise Metrics. Contains Helm templates that are evaulated at install/upgrade.
   # To modify the resulting configuration, either copy and alter 'mimir.config' as a whole or use the 'mimir.structuredConfig' to add and modify certain YAML elements.
   config: |
@@ -250,6 +261,11 @@ mimir:
         heartbeat_period: 1m
         heartbeat_timeout: 4m
 
+    ingester:
+      ring:
+        heartbeat_period: 1m
+        heartbeat_timeout: 4m
+
     frontend:
       parallelize_shardable_queries: true
       {{- if index .Values "results-cache" "enabled" }}
@@ -351,6 +367,7 @@ mimir:
       # Avoid caching results newer than 10m because some samples can be delayed
       # This presents caching incomplete results
       max_cache_freshness: 10m
+
 
     memberlist:
       abort_if_cluster_join_fails: false
@@ -500,6 +517,9 @@ mimir:
         secret_access_key: "miniosecretkey" # This is a secret injected via an environment variable
         access_key_id: "minioaccesskey" # This is a secret injected via an environment variable
         insecure: true
+
+
+
 
 # -- runtimeConfig provides a reloadable runtime configuration. Changing the runtimeConfig doesn't require a restart of all components.
 # For more infromation see https://grafana.com/docs/mimir/latest/configure/about-runtime-configuration/
@@ -853,7 +873,7 @@ distributor:
   enabled: true
 
   # Setting it to null will produce a deployment without replicas set, allowing you to use autoscaling with the deployment
-  replicas: 1
+  replicas: 3
 
   # -- [Experimental] Configure autoscaling via KEDA (https://keda.sh). This requires having
   # KEDA already installed in the Kubernetes cluster. The metrics for scaling are read
@@ -969,7 +989,7 @@ ingester:
   # If ingester.zoneAwareReplication.enabled=false, this number is taken as is.
   # Otherwise each zone starts `ceil(replicas / number_of_zones)` number of pods.
   #   E.g. if 'replicas' is set to 4 and there are 3 zones, then 4/3=1.33 and after rounding up it means 2 pods per zone are started.
-  replicas: 1
+  replicas: 3
 
   statefulSet:
     enabled: true
@@ -986,9 +1006,11 @@ ingester:
 
   resources:
     requests:
-      cpu: 100m
-      memory: 512Mi
-
+      cpu: 500m
+      memory: 800Mi
+    limits:
+      memory: 2Gi
+      cpu: 1
   # Additional ingester container arguments, e.g. log level (debug, info, warn, error)
   extraArgs: {}
   # Pod Labels
@@ -1046,7 +1068,7 @@ ingester:
       - ReadWriteOnce
 
     # Ingester data Persistent Volume size
-    size: 2Gi
+    size: 1Gi
 
     # Subdirectory of Ingester data Persistent Volume to mount
     # Useful if the volume's root directory is not empty
@@ -1054,9 +1076,14 @@ ingester:
 
     # -- Enable StatefulSetAutoDeletePVC feature
     # https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
-    enableRetentionPolicy: false
-    whenDeleted: Retain
-    whenScaled: Retain
+    # enableRetentionPolicy: false
+    # whenDeleted: Retain
+    # whenScaled: Retain
+
+    enableRetentionPolicy: true
+    persistentVolumeClaimRetentionPolicy:
+      whenDeleted: Retain
+      whenScaled: Retain
 
     # Ingester data Persistent Volume Storage Class
     # If defined, storageClassName: <storageClass>
@@ -2046,7 +2073,7 @@ query_scheduler:
 
 store_gateway:
   # -- Whether to render the manifests related to the store-gateway component.
-  enabled: false
+  enabled: true
 
   # -- Total number of replicas for the store-gateway across all availability zones
   # If store_gateway.zoneAwareReplication.enabled=false, this number is taken as is.
@@ -3016,7 +3043,7 @@ nginx:
     # -- Specifies whether an ingress for the nginx should be created
     enabled: false
     # -- Ingress Class Name. MAY be required for Kubernetes versions >= 1.18
-    # ingressClassName: nginx
+    ingressClassName: nginx
     # -- Annotations for the nginx ingress
     annotations: {}
     # -- Hosts configuration for the nginx ingress
@@ -3025,12 +3052,12 @@ nginx:
         paths:
           - path: /
             # -- pathType (e.g. ImplementationSpecific, Prefix, .. etc.) might also be required by some Ingress Controllers
-            # pathType: Prefix
+            pathType: Prefix
     # -- TLS configuration for the nginx ingress
-    tls:
-      - secretName: mimir-nginx-tls
-        hosts:
-          - nginx.mimir.example.com
+    # tls:
+    #   - secretName: mimir-nginx-tls
+    #     hosts:
+    #       - nginx.mimir.example.com
   # -- Route configuration (for OpenShift only)
   route:
     # -- Specifies whether an OpenShift route for the nginx should be created
@@ -3811,7 +3838,8 @@ metaMonitoring:
       # configuration to write logs to this Loki-compatible remote. Optional.
       remote:
         # -- Full URL for Loki push endpoint. Usually ends in /loki/api/v1/push
-        url: "http://mimir-distributor.mimir-test.svc.cluster.local:8080/api/v1/push"
+        # url: "http://mimir-distributor.mimir-test.svc.cluster.local:8080/api/v1/push"
+        url: ""
 
         auth:
           # -- Used to set X-Scope-OrgID header on requests. Usually not used in combination with username and password.
@@ -3987,7 +4015,8 @@ enterprise:
     # -- Grafana Enterprise Metrics container image repository. Note: for Grafana Mimir use the value 'image.repository'
     repository: grafana/enterprise-metrics
     # -- Grafana Enterprise Metrics container image tag. Note: for Grafana Mimir use the value 'image.tag'
-    tag: v2.15.0
+    # tag: v2.15.0
+    tag: r326-2c9bd604
     # Note: pullPolicy and optional pullSecrets are set in toplevel 'image' section, not here
 
 # In order to use Grafana Enterprise Metrics features, you will need to provide the contents of your Grafana Enterprise Metrics
@@ -4601,7 +4630,7 @@ smoke_test:
   backoffLimit: 5
   # The image section has been removed as continuous test is now a module of the regular Mimir image.
   # See settings for the image at the top image section.
-  tenantId: ""
+  tenantId: "tenant12345_exampleTenantID"
   extraArgs: {}
   env: []
   extraEnvFrom: []
@@ -4627,12 +4656,13 @@ continuous_test:
   read:
   # -- Authentication settings of continuous test
   auth:
+    enable: false
     # -- Type of authentication to use (tenantId, basicAuth, bearerToken)
-    type: tenantId
+    type: basicAuth
     # -- The tenant to use for tenantId or basicAuth authentication type
     # In case of tenantId authentication, it is injected as the X-Scope-OrgID header on requests.
     # In case of basicAuth, it is set as the username.
-    tenant: "mimir-continuous-test"
+    username: ""
     # -- Password for basicAuth auth (note: can be environment variable from secret attached in extraEnvFrom, e.g. $(PASSWORD))
     # For GEM, it should contain an access token created for an access policy that allows `metrics:read` and `metrics:write` for the tenant.
     password: null
