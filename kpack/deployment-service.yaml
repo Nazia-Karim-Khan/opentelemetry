@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: kpack-spring-boot-app
-          image: nazia141/kpack-spring-boot-app:1.0
+          image: nazia141/kpack-spring-boot-app:1.0-b1.20250127.161113
           ports:
             - containerPort: 8080
           env:
@@ -24,8 +24,6 @@ spec:
               value: "kpack-service"
             - name: OTEL_JAVAAGENT_ENABLED
               value: "true"
-            # - name: JAVA_TOOL_OPTIONS
-            #   value: "-javaagent:./opentelemetry-javaagent.jar"
             - name: OTEL_TRACES_SAMPLER
               value: "always_on"
             - name: OTEL_TRACES_EXPORTER

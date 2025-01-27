@@ -16,6 +16,7 @@ spec:
   order:
   - group:
     - id: paketo-buildpacks/java
+    - id: paketo-buildpacks/opentelemetry
   - group:
     - id: paketo-buildpacks/nodejs
 

@@ -1,7 +1,7 @@
 apiVersion: kpack.io/v1alpha2
 kind: Image
 metadata:
-  name: spring-app-image
+  name: kpack-spring-app-image
   namespace: kpack
 spec:
   tag: nazia141/kpack-spring-boot-app:1.0
@@ -16,6 +16,6 @@ spec:
   build:
     env:
       - name: BP_OPENTELEMETRY_ENABLED
-        value: "true"   
+        value: "1"   
       - name: BP_JVM_VERSION
         value: "17"   
