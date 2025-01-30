@@ -674,9 +674,16 @@ datasources:
      isDefault: false
    - name: Prometheus
      type: prometheus
-     url: http://mimir-nginx.mimir-test.svc:80/prometheus
+     url: http://mimir-query-frontend.mimir-test.svc.cluster.local:8080/prometheus
      access: proxy
      isDefault: false
+  #  - name: Prometheus
+  #    type: prometheus
+  #    url: http://mimir-nginx.mimir-test.svc:80/prometheus
+  #    access: proxy
+  #    isDefault: false
+
+
 #    - name: CloudWatch
 #      type: cloudwatch
 #      access: proxy
