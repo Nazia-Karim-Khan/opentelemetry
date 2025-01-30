@@ -15,7 +15,7 @@ spec:
 
     exporters:
       otlphttp:
-        endpoint: http://mimir-nginx.mimir-test.svc:80/otlp
+        endpoint: http://mimir-distributor-headless.mimir-test.svc.cluster.local:8080/otlp
         tls:
           insecure: true
       otlphttp/logs:

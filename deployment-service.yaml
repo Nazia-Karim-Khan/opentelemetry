@@ -19,7 +19,8 @@ spec:
     spec:
       containers:
         - name: hello-spring-boot-app
-          image: nazia141/hello-spring-boot-app:1.2
+          # image: nazia141/hello-spring-boot-app:1.2
+          image: nazia141/kpack-spring-boot-app:1.0
           ports:
             - containerPort: 8080
           env:
