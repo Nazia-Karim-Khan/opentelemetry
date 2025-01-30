@@ -19,3 +19,4 @@ spec:
         value: "1"   
       - name: BP_JVM_VERSION
         value: "17"   
+  imageTaggingStrategy: None

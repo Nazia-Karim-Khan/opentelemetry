@@ -16,7 +16,8 @@ spec:
     spec:
       containers:
         - name: kpack-spring-boot-app
-          image: nazia141/kpack-spring-boot-app:1.0-b1.20250127.161113
+          image: nazia141/kpack-spring-boot-app:1.0
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:
@@ -36,6 +37,18 @@ spec:
               value: "grpc"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://opentelemetry-collector-collector.opentelemetry.svc.cluster.local:4317"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
 
 ---
 apiVersion: v1
