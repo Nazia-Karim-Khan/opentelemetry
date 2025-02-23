@@ -1,6 +1,6 @@
 Setup k0s cluster using:
 k0sctl apply --config k0s/k0sctl.yaml --no-wait
-k0sctl kubeconfig        
+k0sctl kubeconfig --config k0s/k0sctl.yaml 
 if needed:
 cat /etc/resolv.conf
 nameserver 8.8.8.8
