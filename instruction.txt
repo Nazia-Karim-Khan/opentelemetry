@@ -10,6 +10,7 @@ Install cilium:
 chmod +x cilium/install.sh
 cilium install --version 1.16.1 --values cilium/cilium-values.yaml 
 cilium status --wait
+
 helm uninstall cilium -n kube-system
 
 Install openebs:
